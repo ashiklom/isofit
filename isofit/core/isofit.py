@@ -116,10 +116,7 @@ class Isofit:
                 # specific to this spectrum. Typically these would be empty,
                 # though they could contain new location-specific prior
                 # distributions.
-
-                ### RAISES interp1d() ERROR! ###
-                # self.fm.reconfigure(*configs)
-                ###
+                self.fm.reconfigure(*configs)
 
                 if self.profile:
                     # Profile output
