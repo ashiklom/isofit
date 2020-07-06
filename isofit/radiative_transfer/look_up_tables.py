@@ -200,7 +200,7 @@ class TabularRT:
             os.chdir(self.lut_dir)
 
             # Make the LUT calls (in parallel if specified)
-            results = [spawn_rt.remote(rebuild_cmd, self.lut_dir) for rebuild_cmd in rebuild_cmds]
+            results = [spawn_rt(rebuild_cmd, self.lut_dir) for rebuild_cmd in rebuild_cmds]
 
 
     def get_lut_filenames(self):

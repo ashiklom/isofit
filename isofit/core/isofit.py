@@ -172,7 +172,7 @@ class Isofit:
         index_sets = np.linspace(0, n_iter, num=n_workers+1, dtype=int)
 
         # Run spectra, in either serial or parallel depending on n_workers
-        results = [self._run_set_of_spectra.remote(self, index_sets[l], index_sets[l + 1])
+        results = [self._run_set_of_spectra(self, index_sets[l], index_sets[l + 1])
                            for l in range(len(index_sets)-1)]
 
         total_time = time.time() - start_time
