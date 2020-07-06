@@ -66,7 +66,6 @@ html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
 
 # make sure things will work with readthedocs
-autodoc_mock_imports = ["ray"]
 master_doc = 'index'
 
 autodoc_member_order = 'bysource'

@@ -26,7 +26,6 @@ import time
 
 import multiprocessing
 import numpy as np
-import ray
 
 from isofit.core.forward import ForwardModel
 from isofit.inversion.inverse import Inversion
@@ -77,21 +76,7 @@ class Isofit:
         self.config = configs.create_new_config(config_file)
         self.config.get_config_errors()
 
-        # Initialize ray for parallel execution
-        rayargs = {'address': self.config.implementation.ip_head,
-                   'redis_password': self.config.implementation.redis_password,
-                   'local_mode': self.config.implementation.n_cores == 1}
-
-        # only specify a temporary directory if we are not connecting to 
-        # a ray cluster
-        if rayargs['local_mode']:
-            rayargs['temp_dir'] = self.config.implementation.ray_temp_dir
-
         # We can only set the num_cpus if running on a single-node
-        if self.config.implementation.ip_head is None and self.config.implementation.redis_password is None:
-            rayargs['num_cpus'] = self.config.implementation.n_cores
-        ray.init(**rayargs)
-
         if len(row_column) > 0:
             ranges = row_column.split(',')
             if len(ranges) == 1:
@@ -129,7 +114,6 @@ class Isofit:
         self.fm = None
         self.iv = None
 
-    @ray.remote
     def _run_set_of_spectra(self, index_start: int, index_stop: int) -> None:
         """Internal function to run a chunk of spectra
 
@@ -188,8 +172,8 @@ class Isofit:
         index_sets = np.linspace(0, n_iter, num=n_workers+1, dtype=int)
 
         # Run spectra, in either serial or parallel depending on n_workers
-        results = ray.get([self._run_set_of_spectra.remote(self, index_sets[l], index_sets[l + 1])
-                           for l in range(len(index_sets)-1)])
+        results = [self._run_set_of_spectra.remote(self, index_sets[l], index_sets[l + 1])
+                           for l in range(len(index_sets)-1)]
 
         total_time = time.time() - start_time
         logging.info('Inversions complete.  {} s total, {} spectra/s, {} spectra/s/core'.format(

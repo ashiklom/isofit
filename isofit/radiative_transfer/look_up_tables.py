@@ -21,7 +21,6 @@
 import os
 import numpy as np
 import logging
-import ray
 from collections import OrderedDict
 import subprocess
 import time
@@ -35,7 +34,6 @@ from isofit.configs.sections.implementation_config import ImplementationConfig
 
 ### Functions ###
 
-@ray.remote
 def spawn_rt(cmd, local_dir=None):
     """Run a CLI command."""
 
@@ -202,7 +200,7 @@ class TabularRT:
             os.chdir(self.lut_dir)
 
             # Make the LUT calls (in parallel if specified)
-            results = ray.get([spawn_rt.remote(rebuild_cmd, self.lut_dir) for rebuild_cmd in rebuild_cmds])
+            results = [spawn_rt.remote(rebuild_cmd, self.lut_dir) for rebuild_cmd in rebuild_cmds]
 
 
     def get_lut_filenames(self):
