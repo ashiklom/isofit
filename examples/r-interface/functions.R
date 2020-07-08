@@ -51,8 +51,7 @@ write_libradtran_template <- function(template_list, con) {
 #' @param instrument_configs Instrument configuration list (default = `list(SNR = 300)`)
 #' @param aot_state Modifications to AOT statevector
 #' @param h2o_state Modifications to H2O statevector
-#' @param aot_lut AOT look-up table grid (default = `c(0.001, 0.123, 0.6)`)
-#' @param h2o_lut H2O look-up table grid (default = `c(1.0, 2.5, 3.25)`)
+#' @param lut Look-up table named list (e.g. `list(AOT550 = c(...), H2OSTR = c(...))`)
 #' @param outdir Output directory (default = "output")
 #' @param inversion_windows List of inversion windows (start, end)
 #' @param prior_mean Prior mean (matrix, components x wavelengths)
@@ -69,8 +68,10 @@ ht_workflow <- function(reflectance,
                         instrument_configs = list(SNR = 300),
                         aot_state = list(),
                         h2o_state = list(),
-                        aot_lut = c(0.001, 0.123, 0.6),
-                        h2o_lut = c(1.0, 2.5, 3.25),
+                        lut = list(
+                          AOT550 = c(0.001, 0.123, 0.6),
+                          H2OSTR = c(1.0, 2.5, 3.25)
+                        ),
                         outdir = "output",
                         inversion_windows = list(
                           c(400, 1300),
@@ -150,14 +151,17 @@ ht_workflow <- function(reflectance,
   lrt_wavelengths_str <- libradtran_template[["wavelength"]]
   lrt_wavelengths <- as.numeric(strsplit(lrt_wavelengths_str, " ")[[1]])
 
+  lut_grid2 <- do.call(dict, lut)
+  lut_names <- names(lut)
+
   rtm_settings <- dict(
-    lut_grid = dict(AOT550 = aot_lut, H2OSTR = h2o_lut),
+    lut_grid = lut_grid2,
     radiative_transfer_engines = dict(
       vswir = dict(
         engine_name = "libradtran",
         engine_base_dir = libradtran_basedir,
         environment = libradtran_environment,
-        lut_names = state_names,
+        lut_names = lut_names,
         lut_path = lut_outdir,
         statevector_names = state_names,
         template_file = lrt_file,
