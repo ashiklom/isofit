@@ -9,7 +9,7 @@
 # midlatitude_summery, midlatitude_winter,
 # subarctic_summer, subarctic_winter,
 # US-standard
-atmosphere_file midlatitude_winter
+atmosphere_file {atmosphere}
 
 # File path for incident solar spectrum
 # NOTE: It's safest to make this an absolute path (to be certain), but this path
@@ -33,7 +33,7 @@ crs_model rayleigh bodhaine
 # Cosine output polar (zenith) angle
 # Negative -- downwelling radiance, looking up
 # Positive -- upwelling radiance, looking down
-umu 1.0
+umu {cos_obszen}
 
 # Azimuth output angle (degrees)
 phi 0.0

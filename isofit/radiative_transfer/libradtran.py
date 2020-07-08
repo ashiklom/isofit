@@ -72,7 +72,8 @@ class LibRadTranRT(TabularRT):
         """."""
 
         # start with defaults
-        vals = {'atmosphere': 'midlatitude_summer'}
+        vals = {'atmosphere': 'midlatitude_summer',
+                'cos_obszen': 1.0}
         for n, v in zip(self.lut_names, point):
             vals[n] = v
 
@@ -81,6 +82,8 @@ class LibRadTranRT(TabularRT):
             vals['aerosol_visibility'] = self.ext550_to_vis(vals['AOT550'])
         if 'H2OSTR' in self.lut_names:
             vals['h2o_mm'] = vals['H2OSTR']*10.0
+        if 'OBSZEN' in self.lut_names:
+            vals['cos_obszen'] = np.cos(vals['OBSZEN'] * np.pi / 180.0)
 
         with open(self.libradtran_template_file, 'r') as fin:
             template = fin.read()
