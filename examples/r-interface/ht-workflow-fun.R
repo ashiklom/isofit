@@ -33,10 +33,14 @@ r1 <- ht_workflow(
   reflectance, 1.5, 0.2, wavelengths,
   libradtran_template, outdir
 )
+
+figdir <- dir_create(here("examples", "r-interface", "figures"))
+png(path(figdir, "ht-workflow-fun.png"))
 plot(wavelengths, r1$reflectance, type = 'l',
      ylim = range(r1$reflectance, reflectance, na.rm = TRUE))
 lines(wavelengths, reflectance, col = "red")
 legend("topright", c("estimated", "true"), lty = 1,
        col = c("black", "red"))
+dev.off()
 
 # See ht_workflow documentation in the `functions.R` file for more details.
