@@ -32,7 +32,10 @@ run_ht <- function(true_h2o, true_aot, noisefile) {
   )
 }
 
+ray <- reticulate::import("ray")
+ray_init <- ray$init()
 ht_matrix$results <- pmap(ht_matrix, run_ht)
+ray$shutdown()
 
 htm2 <- ht_matrix %>%
   mutate(

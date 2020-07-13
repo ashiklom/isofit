@@ -40,7 +40,3 @@ legend("topright", c("estimated", "true"), lty = 1,
        col = c("black", "red"))
 
 # See ht_workflow documentation in the `functions.R` file for more details.
-if (!interactive()) {
-  ray <- reticulate::import("ray")
-  if (ray$is_initialized()) ray$shutdown()
-}

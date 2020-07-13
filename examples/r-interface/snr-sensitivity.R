@@ -32,7 +32,10 @@ run_snr <- function(snr) {
 
 # Run a single reflectance spectrum
 snr <- c(1, 10, 100, 200)
+ray <- import("ray")
+ray_init <- ray$init()
 outlist <- lapply(snr, run_snr)
+ray$shutdown()
 out_refl <- do.call(cbind, lapply(outlist, "[[", "reflectance"))
 
 png("examples/r-interface/figures/snr-simple.png")

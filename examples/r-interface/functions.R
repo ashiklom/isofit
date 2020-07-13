@@ -232,7 +232,10 @@ ht_workflow <- function(reflectance,
   ))
   inverse_config <- isofit_configs$Config(inversion_settings)
 
-  if (!ray$is_initialized()) ray_server <- ray$init()
+  if (!ray$is_initialized()) {
+    init_ray <- ray$init()
+    on.exit(ray$shutdown(), add = TRUE)
+  }
   message("Building forward model...")
   fm <- isofit_forward$ForwardModel(fm_config)
   iv <- isofit_inverse$Inversion(inverse_config, fm)
