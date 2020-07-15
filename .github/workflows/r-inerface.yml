@@ -54,4 +54,12 @@ jobs:
 
     - name: Run basic hypertrace workflow
       run: |
-        Rscript examples/r-interface/ht-workflow-fun.R
+        Rscript examples/r-interface/examples/basic-workflow.R
+
+    - name: Run workflow with existing MODTRAN luts
+      run: |
+        Rscript examples/r-interface/examples/existing-lut.R
+
+    - name: Run workflow with multiple geometries
+      run: |
+        Rscript examples/r-interface/examples/geometry.R

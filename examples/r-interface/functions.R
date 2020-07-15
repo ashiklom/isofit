@@ -61,6 +61,7 @@ write_libradtran_template <- function(template_list, con) {
 #' @param inversion_windows List of inversion windows (start, end)
 #' @param prior_mean Prior mean (matrix, components x wavelengths)
 #' @param prior_cov Prior covariance matrix (array, components x wavelengths x wavelengths)
+#' @param vswir_configs Modifications to VSWIR RTM configuration, as a named list (default = `list()`).
 #' @return Forward uncertainty list
 #' @author Alexey Shiklomanov
 ht_workflow <- function(reflectance,
@@ -86,7 +87,8 @@ ht_workflow <- function(reflectance,
                         prior_cov = array(
                           diag(1, length(wavelengths)),
                           c(1, length(wavelengths), length(wavelengths))
-                        )) {
+                        ),
+                        vswir_configs = list()) {
 
   stopifnot(
     NROW(reflectance) == length(wavelengths),
@@ -149,9 +151,6 @@ ht_workflow <- function(reflectance,
   )
   h2o_state2 <- modifyList(h2o_state_default, h2o_state)
 
-  lrt_wavelengths_str <- libradtran_template[["wavelength"]]
-  lrt_wavelengths <- as.numeric(strsplit(lrt_wavelengths_str, " ")[[1]])
-
   # Geometry configuration
   geom_default <- list(
     path_length = -999, # not used
@@ -171,34 +170,55 @@ ht_workflow <- function(reflectance,
   geom_list <- modifyList(geom_default, geom)
   geomvec <- unname(unlist(geom_list))
 
-  # Modify libradtran template with geometry information
-  phi0 <- geom_list$solar_azimuth + 180
-  if (phi0 >= 360) phi0 <- phi0 - 360
-  lrt <- modifyList(libradtran_template, list(
-    umu = cos(geom_list$observer_zenith * pi / 180),
-    phi = geom_list$observer_azimuth,
-    phi0 = phi0
-  ))
-  lrt_digest <- digest::digest(lrt)
-  lut_outdir <- file.path(outdir, "lut", lrt_digest)
-  dir.create(lut_outdir, showWarnings = FALSE, recursive = TRUE)
-  lrt_file <- file.path(lut_outdir, "00-libradtran-template.inp")
-  write_libradtran_template(lrt, lrt_file)
+  if (is.null(vswir_configs[["lut_path"]])) {
+    # Get the libradtran wavelength range from its template
+    lrt_wavelengths_str <- libradtran_template[["wavelength"]]
+    lrt_wavelengths <- as.numeric(strsplit(lrt_wavelengths_str, " ")[[1]])
+
+    # Modify libradtran template with geometry information
+    phi0 <- geom_list$solar_azimuth + 180
+    if (phi0 >= 360) phi0 <- phi0 - 360
+    lrt <- modifyList(libradtran_template, list(
+      umu = cos(geom_list$observer_zenith * pi / 180),
+      phi = geom_list$observer_azimuth,
+      phi0 = phi0
+    ))
+    lrt_digest <- digest::digest(lrt)
+    lut_outdir <- file.path(outdir, "lut", lrt_digest)
+    dir.create(lut_outdir, showWarnings = FALSE, recursive = TRUE)
+    lrt_file <- file.path(lut_outdir, "00-libradtran-template.inp")
+    write_libradtran_template(lrt, lrt_file)
+  } else {
+    message(
+      "Detected custom LUT path. ",
+      "Assuming pre-existing LUTs and ignoring in-memory Libradtran template. ",
+      "If you need to create your own LUTs, you will need to include ",
+      "`template_file = '/path/to/template/file'` in the ",
+      "`vswir_configs` list."
+    )
+    lut_outdir <- NULL
+    lrt_file <- NULL
+    lrt_wavelengths <- NULL
+  }
+
+  ## vswir_configs <- vconf
+
+  vswir_config_default <- list(
+    engine_name = "libradtran",
+    engine_base_dir = libradtran_basedir,
+    environment = libradtran_environment,
+    lut_names = state_names,
+    lut_path = lut_outdir,
+    statevector_names = state_names,
+    template_file = lrt_file,
+    wavelength_range = lrt_wavelengths
+  )
+  vswir_config2 <- modifyList(vswir_config_default, vswir_configs)
+  vswir_dict <- do.call(reticulate::dict, vswir_config2)
 
   rtm_settings <- reticulate::dict(
     lut_grid = reticulate::dict(AOT550 = aot_lut, H2OSTR = h2o_lut),
-    radiative_transfer_engines = reticulate::dict(
-      vswir = reticulate::dict(
-        engine_name = "libradtran",
-        engine_base_dir = libradtran_basedir,
-        environment = libradtran_environment,
-        lut_names = state_names,
-        lut_path = lut_outdir,
-        statevector_names = state_names,
-        template_file = lrt_file,
-        wavelength_range = lrt_wavelengths
-      )
-    ),
+    radiative_transfer_engines = reticulate::dict(vswir = vswir_dict),
     statevector = reticulate::dict(
       AOT550 = do.call(reticulate::dict, aot_state2),
       H2OSTR = do.call(reticulate::dict, h2o_state2)
