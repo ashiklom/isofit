@@ -111,16 +111,18 @@ ht_workflow <- function(reflectance,
     ])
   }
 
+  nwl <- length(wavelengths)
+  nwl_ref <- length(prior_ref_wl)
+  ncomponents <- nrow(prior_mean)
+
   prior_file <- file.path(outdir, "prior.mat")
   R.matlab::writeMat(
     con = prior_file,
     normalize = "Euclidean",
-    # HACK: Should match number of components
-    wl = t(wavelengths),
+    wl = t(matrix(wavelengths, nwl, ncomponents)),
     means = prior_mean,
     covs = prior_cov,
-    # HACK: Should match number of components
-    refwl = t(prior_ref_wl)
+    refwl = t(matrix(prior_ref_wl, nwl_ref, ncomponents))
   )
 
   # Create Python config dicts
