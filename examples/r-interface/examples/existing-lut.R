@@ -12,7 +12,7 @@ modtran_template <- file.path(lut_path, "modtran-config.json")
 chn <- read.table(file.path(lut_path, "AOT550-0.0100_H2OSTR-1.5000.chn"),
                   skip = 5, header = FALSE)
 wl <- chn[,1]
-refl_full <- rrtm::pro4sail_4(1.4, 40, 0.01, 0.01, 3, 0.5)$bdr[,1]
+refl_full <- rrtm::pro4sail_4(1.4, 40, 0.01, 0.01, 3, 0.5)$bdr
 refl <- approx(400:2500, refl_full, xout = wl, rule = 2)$y
 
 vconf <- list(
