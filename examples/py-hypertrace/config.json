@@ -1,6 +1,7 @@
 {
     "wavelength_file": "../r-interface/output/wavelengths.txt",
     "surface_file": "../r-interface/output/prior.mat",
+    "reflectance_file": "~/projects/sbg-uncertainty/ht-minimal/data/reference_reflectance.hdr",
     "isofit": {
         "forward_model": {
             "instrument": {"SNR": 300},
@@ -32,12 +33,12 @@
                 "radiative_transfer_engines": {
                     "vswir": {
                         "engine_name": "libradtran",
-                        "engine_base_dir": "~/projects/models/libradtran/libRadtran-2.0.3",
-                        "environment": "",
+                        "engine_base_dir": "~/projects/models/libRadtran-2.0.3",
+                        "environment": "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib",
                         "lut_names": ["H2OSTR", "AOT550"],
-                        "lut_path": "/Users/ashiklom/projects/sbg-uncertainty/isofit/examples/py-hypertrace/output/lut/",
+                        "lut_path": "./lut/",
                         "statevector_names": ["H2OSTR", "AOT550"],
-                        "template_file": "/Users/ashiklom/projects/sbg-uncertainty/isofit/examples/r-interface/lrt_template.inp"
+                        "template_file": "../r-interface/lrt_template.inp"
                     }
                 }
             }
