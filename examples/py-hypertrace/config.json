@@ -1,0 +1,55 @@
+{
+    "wavelength_file": "../r-interface/output/wavelengths.txt",
+    "surface_file": "../r-interface/output/prior.mat",
+    "isofit": {
+        "forward_model": {
+            "instrument": {"SNR": 300},
+            "surface": {
+                "surface_category": "multicomponent_surface"
+            },
+            "radiative_transfer": {
+                "lut_grid": {
+                    "AOT550": [0.001, 0.123, 0.6],
+                    "H2OSTR": [1.0, 2.5, 3.25]
+                },
+                "statevector": {
+                    "AOT550": {
+                        "bounds": [0.01, 0.6],
+                        "scale": 0.01,
+                        "prior_mean": 0.05,
+                        "prior_sigma": 0.2,
+                        "init": 0.05
+                    },
+                    "H2OSTR": {
+                        "bounds": [0.01, 0.1],
+                        "scale": 0.01,
+                        "prior_mean": 0.05,
+                        "prior_sigma": 0.2,
+                        "init": 0.05
+                    }
+                },
+                "unknowns": {"H2O_ABSCO": 0.01},
+                "radiative_transfer_engines": {
+                    "vswir": {
+                        "engine_name": "libradtran",
+                        "engine_base_dir": "~/projects/models/libradtran/libRadtran-2.0.3",
+                        "environment": "",
+                        "lut_names": ["H2OSTR", "AOT550"],
+                        "lut_path": "/Users/ashiklom/projects/sbg-uncertainty/isofit/examples/py-hypertrace/output/lut/",
+                        "statevector_names": ["H2OSTR", "AOT550"],
+                        "template_file": "/Users/ashiklom/projects/sbg-uncertainty/isofit/examples/r-interface/lrt_template.inp"
+                    }
+                }
+            }
+        },
+        "implementation": {
+            "inversion": {
+                "windows": [[400, 1300], [1450, 1780], [1950, 2450]]
+            }
+        }
+    },
+    "hypertrace": {
+        "true_AOD": [0.1, 0.2, 0.3],
+        "true_H2O": [1.0, 2.0]
+    }
+}
