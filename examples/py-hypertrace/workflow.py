@@ -74,6 +74,4 @@ for noisefile in hypertrace_config.get("instrument_noise"):
             inverse_settings = config["isofit"]["implementation"]
             inverse_settings["mode"] = "inversion"
             iv = Inversion(Config({"implementation": inverse_settings}), fm)
-            unc_l = ray.get([ht_invert.remote(rad, iv, igeom) for rad in radiance])
-
-pickle.dump(results, open("results.pkl", "wb"))
+            unc_l = ray.get([ht_invert.remote(rad, iv, igeom) for rad in radiance_l])
