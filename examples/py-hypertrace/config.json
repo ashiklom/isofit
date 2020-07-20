@@ -50,7 +50,13 @@
         }
     },
     "hypertrace": {
-        "true_AOD": [0.1, 0.2, 0.3],
-        "true_H2O": [1.0, 2.0]
+        "true_AOD": [0.1],
+        "true_H2O": [1.0],
+        "instrument_noise": ["../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe0.txt",
+                             "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe1.txt",
+                             "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe2.txt",
+                             "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe3.txt",
+                             "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe4.txt"],
+        "instrument_integrations": 1
     }
 }
