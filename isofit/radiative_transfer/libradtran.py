@@ -227,7 +227,10 @@ class LibRadTranRT(TabularRT):
         transup = np.zeros(self.wl.shape)
 
         # Get solar zenith, translate to irradiance at zenith = 0
-        with open(self.lut_dir+'/LUT_'+fn+'.zen', 'r') as fin:
+        zenfile = self.lut_dir + "/prescribed_geom"
+        if not os.path.exists(zenfile):
+            zenfile = self.lut_dir+'/LUT_'+fn+'.zen', 'r'
+        with open(zenfile, 'r') as fin:
             output = fin.read().split()
             solzen, solaz = [float(q) for q in output[1:]]
 

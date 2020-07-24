@@ -1,7 +1,7 @@
 {
     "wavelength_file": "../r-interface/output/wavelengths.txt",
     "surface_file": "../r-interface/output/prior.mat",
-    "reflectance_file": "~/projects/sbg-uncertainty/ht-minimal/data/reference_reflectance.hdr",
+    "reflectance_file": "./reference_reflectance.hdr",
     "isofit": {
         "forward_model": {
             "instrument": {"SNR": 300},
@@ -38,7 +38,7 @@
                         "lut_names": ["H2OSTR", "AOT550"],
                         "lut_path": "./lut/",
                         "statevector_names": ["H2OSTR", "AOT550"],
-                        "template_file": "../r-interface/lrt_template.inp"
+                        "template_file": "./lrt-template.inp"
                     }
                 }
             }

@@ -2,6 +2,8 @@
 
 import numpy as np
 import ray
+import pathlib
+
 
 @ray.remote
 def ht_radiance(refl, aot, h2o, fm, igeom):
@@ -10,6 +12,7 @@ def ht_radiance(refl, aot, h2o, fm, igeom):
     radiance = fm.calc_rdn(statevec, igeom)
     return radiance
 
+
 @ray.remote
 def ht_invert(rad, iv, igeom):
     """Invert TOA radiance to get reflectance."""
@@ -17,3 +20,9 @@ def ht_invert(rad, iv, igeom):
     state_est = state_trajectory[-1]
     unc = iv.forward_uncertainty(state_est, rad, igeom)
     return unc
+
+
+def mkabs(path):
+    """Make a path absolute."""
+    path2 = pathlib.Path(path)
+    return path2.expanduser().resolve()
