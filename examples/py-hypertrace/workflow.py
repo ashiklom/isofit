@@ -77,7 +77,7 @@ def do_hypertrace(isofit_config,
     lrttag = f"atm_{lrt_atmosphere_type}__" +\
         f"szen_{solar_zenith}__" +\
         f"ozen_{observer_zenith}__" +\
-        f"saz_{solar_azimuth}" +\
+        f"saz_{solar_azimuth}__" +\
         f"oaz_{observer_azimuth}"
 
     if create_lut:
