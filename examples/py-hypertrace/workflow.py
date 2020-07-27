@@ -3,13 +3,13 @@
 from pathlib import Path
 from atexit import register
 import json
-import ray
-import spectral
-import pickle
 import copy
-import os
+import pickle
+import itertools
 
 import numpy as np
+import ray
+import spectral
 
 from isofit.configs.configs import Config
 from isofit.core.forward import ForwardModel
@@ -130,33 +130,13 @@ def do_hypertrace(isofit_config,
     return outdir2
 
 
-for noisefile_rel in hypertrace_config.get("instrument_noise"):
-    noisefile = mkabs(noisefile_rel)
-    print(noisefile)
-    for aod in config["hypertrace"]["true_AOD"]:
-        print(aod)
-        for h2o in config["hypertrace"]["true_H2O"]:
-            print(h2o)
-            do_hypertrace(isofit_config, wavelength_file,
-                          surface_file, reflectance_file,
-                          libradtran_template_file,
-                          noisefile=noisefile, aod=aod, h2o=h2o)
-
-#             fm = ForwardModel(Config({"forward_model": forward_settings}))
-#             geomvec = [
-#                 -999, # path length; not used
-#                 0, # Observer azimuth; Degrees 0-360; 0 = Sensor in N, looking S; 90 = Sensor in W, looking E
-#                 0, # Observer zenith; Degrees 0-90; 0 = directly overhead, 90 = horizon
-#                 0, # Solar azimuth; Degrees 0-360; 0 = N, 90 = W, 180 = S, 270 = E
-#                 0   # Solar zenith; not used (determined from time)
-#             ]
-#             igeom = Geometry(obs=geomvec)
-#             # Forward simulation
-#             radiance_l = ray.get([ht_radiance.remote(refl, aot, h2o, fm, igeom) for refl in reflectance])
-#             nwl = len(radiance_l[0])
-#             radiance = np.reshape(np.asarray(radiance_l),
-#                                   np.concatenate((reflectance_img.shape[0:2], [nwl])))
-#             inverse_settings = config["isofit"]["implementation"]
-#             inverse_settings["mode"] = "inversion"
-#             iv = Inversion(Config({"implementation": inverse_settings}), fm)
-#             unc_l = ray.get([ht_invert.remote(rad, iv, igeom) for rad in radiance_l])
+# Create iterable config permutation object
+ht_iter = itertools.product(*hypertrace_config.values())
+for ht in ht_iter:
+    argd = dict()
+    for key, value in zip(hypertrace_config.keys(), ht):
+        argd[key] = value
+    print(argd)
+    do_hypertrace(isofit_config, wavelength_file, surface_file,
+                  reflectance_file, libradtran_template_file,
+                  **argd)

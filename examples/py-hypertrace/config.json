@@ -5,7 +5,10 @@
     "libradtran_template_file": "./lrt-template.inp",
     "isofit": {
         "forward_model": {
-            "instrument": {"SNR": 300},
+            "instrument": {
+                "SNR": 300,
+                "integrations": 1
+            },
             "surface": {
                 "surface_category": "multicomponent_surface"
             },
@@ -50,13 +53,12 @@
         }
     },
     "hypertrace": {
-        "true_AOD": [0.1, 0.2, 0.3],
-        "true_H2O": [1.0, 1.5, 2.0],
-        "instrument_noise": ["../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe0.txt",
-                             "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe1.txt",
-                             "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe2.txt",
-                             "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe3.txt",
-                             "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe4.txt"],
-        "instrument_integrations": 1
+        "aod": [0.1, 0.2, 0.3],
+        "h2o": [1.0, 1.5, 2.0],
+        "noisefile": ["../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe0.txt",
+                      "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe1.txt",
+                      "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe2.txt",
+                      "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe3.txt",
+                      "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe4.txt"]
     }
 }
