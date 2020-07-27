@@ -43,10 +43,11 @@ if not ray.is_initialized():
 def do_hypertrace(isofit_config,
                   wavelength_file, surface_file, reflectance_file,
                   libradtran_template_file,
-                  noisefile=None, aod=0.1, h2o=1.0, snr=300,
+                  noisefile=None, snr=300,
+                  aod=0.1, h2o=1.0, lrt_atmosphere_type="midlatitude_winter",
+                  atm_aod_h2o=None,
                   solar_zenith=0, observer_zenith=0,
                   solar_azimuth=0, observer_azimuth=0,
-                  lrt_atmosphere_type="midlatitude_winter",
                   create_lut=True,
                   lutdir="./luts",
                   outdir="./output"):
@@ -77,11 +78,17 @@ def do_hypertrace(isofit_config,
         noisetag = f"snr_{snr}"
         instrument_settings["SNR"] = snr
 
+    if atm_aod_h2o is not None:
+        lrt_atmosphere_type = atm_aod_h2o[0]
+        aod = atm_aod_h2o[1]
+        h2o = atm_aod_h2o[2]
+
     lrttag = f"atm_{lrt_atmosphere_type}__" +\
         f"szen_{solar_zenith}__" +\
         f"ozen_{observer_zenith}__" +\
         f"saz_{solar_azimuth}__" +\
         f"oaz_{observer_azimuth}"
+    atmtag = f"aod_{aod}__h2o_{h2o}"
 
     if create_lut:
         lutdir = mkabs(lutdir)
@@ -102,7 +109,7 @@ def do_hypertrace(isofit_config,
         vswir_conf["lut_path"] = lutdir2
         vswir_conf["template_file"] = lrtfile
 
-    outdir2 = outdir / lrttag / noisetag
+    outdir2 = outdir / lrttag / noisetag / atmtag
     outdir2.mkdir(parents=True, exist_ok=True)
     fm = ForwardModel(Config({"forward_model": forward_settings}))
     geomvec = [
@@ -119,13 +126,27 @@ def do_hypertrace(isofit_config,
     nwl = len(radiance_l[0])
     output_dim = np.concatenate((spatial_dim, [nwl]))
     radiance = np.reshape(np.asarray(radiance_l), output_dim)
+    radiance_img = spectral.envi.create_image(outdir2 / "toa-radiance.hdr",
+                                              shape=output_dim,
+                                              dtype=np.float64,
+                                              force=True)
+    radiance_img_m = radiance_img.open_memmap(writable=True)
+    radiance_img_m[:, :, :] = radiance
+    # Delete memmap to write to disk and free up memory
+    del radiance_img_m
     inverse_settings = config["isofit"]["implementation"]
     inverse_settings["mode"] = "inversion"
     iv = Inversion(Config({"implementation": inverse_settings}), fm)
     unc_l = ray.get([ht_invert.remote(rad, iv, igeom) for rad in radiance_l])
-    est_refl = [item[0] for item in unc_l]
-    pickle.dump(radiance, open(outdir2 / "toa-radiance.pkl", "wb"))
-    pickle.dump(est_refl, open(outdir2 / "estimated-reflectance.pkl", "wb"))
+    est_refl_l = [item[0] for item in unc_l]
+    est_refl = np.reshape(np.asarray(est_refl_l), output_dim)
+    est_refl_img = spectral.envi.create_image(outdir2 / "estimated-reflectance.hdr",
+                                              shape=output_dim,
+                                              dtype=np.float64,
+                                              force=True)
+    est_refl_img_m = est_refl_img.open_memmap(writable=True)
+    est_refl_img_m[:, :, :] = est_refl
+    del est_refl_img_m
     pickle.dump(unc_l, open(outdir2 / "uncertainty.pkl", "wb"))
     return outdir2
 
