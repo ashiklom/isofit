@@ -7,7 +7,17 @@ Objective: Starting from known surface reflectance and atmospheric conditions, s
 First, make sure you have Isofit installed.
 In addition, you will need to have a working compiled version of the LibRadtran atmospheric radiative transfer model (see Installation section below).
 
-To run the workflow, from the command line, run: `python workflow.py <configfile>` (e.g. `python workflow.py config.json`).
+Make a local copy of the `config-example.json` and modify to fit your system (most important is radiative transfer engine base directly and environment.
+
+``` sh
+cp config-example.json myconfig.json
+```
+
+Then, run the `workflow.py` script with your config file as an argument:
+
+```sh
+python workflow.py myconfig.json
+```
 
 ## Configuration file
 
