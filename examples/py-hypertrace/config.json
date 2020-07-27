@@ -2,6 +2,7 @@
     "wavelength_file": "../r-interface/output/wavelengths.txt",
     "surface_file": "../r-interface/output/prior.mat",
     "reflectance_file": "./reference_reflectance.hdr",
+    "libradtran_template_file": "./lrt-template.inp",
     "isofit": {
         "forward_model": {
             "instrument": {"SNR": 300},
@@ -37,8 +38,7 @@
                         "environment": "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib",
                         "lut_names": ["H2OSTR", "AOT550"],
                         "lut_path": "./lut/",
-                        "statevector_names": ["H2OSTR", "AOT550"],
-                        "template_file": "./lrt-template.inp"
+                        "statevector_names": ["H2OSTR", "AOT550"]
                     }
                 }
             }
@@ -50,8 +50,8 @@
         }
     },
     "hypertrace": {
-        "true_AOD": [0.1],
-        "true_H2O": [1.0],
+        "true_AOD": [0.1, 0.2, 0.3],
+        "true_H2O": [1.0, 1.5, 2.0],
         "instrument_noise": ["../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe0.txt",
                              "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe1.txt",
                              "../r-interface/examples/data/noisefiles/noise_coeff_sbg_cbe2.txt",

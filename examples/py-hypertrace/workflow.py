@@ -24,6 +24,7 @@ with open("./config.json") as f:
 wavelength_file = mkabs(config["wavelength_file"])
 surface_file = mkabs(config["surface_file"])
 reflectance_file = mkabs(config["reflectance_file"])
+libradtran_template_file = mkabs(config["libradtran_template_file"])
 
 isofit_config = config["isofit"]
 hypertrace_config = config["hypertrace"]
@@ -31,7 +32,8 @@ hypertrace_config = config["hypertrace"]
 # Make RTM paths absolute
 vswir_settings = isofit_config["forward_model"]["radiative_transfer"]["radiative_transfer_engines"]["vswir"]
 for key in ["lut_path", "template_file", "engine_base_dir"]:
-    vswir_settings[key] = mkabs(vswir_settings[key])
+    if key in vswir_settings:
+        vswir_settings[key] = mkabs(vswir_settings[key])
 
 if not ray.is_initialized():
     ray.init()
@@ -40,6 +42,7 @@ if not ray.is_initialized():
 
 def do_hypertrace(isofit_config,
                   wavelength_file, surface_file, reflectance_file,
+                  libradtran_template_file,
                   noisefile=None, aod=0.1, h2o=1.0, snr=300,
                   solar_zenith=0, observer_zenith=0,
                   solar_azimuth=0, observer_azimuth=0,
@@ -67,7 +70,7 @@ def do_hypertrace(isofit_config,
         noisetag = f"noise_{Path(noisefile).name}"
         if "SNR" in instrument_settings:
             instrument_settings.pop("SNR")
-        instrument_settings["parametric_noise_file"] = mkabs(noisefile)
+        instrument_settings["parametric_noise_file"] = noisefile
         if "integrations" not in instrument_settings:
             instrument_settings["integrations"] = 1
     elif snr is not None:
@@ -87,7 +90,7 @@ def do_hypertrace(isofit_config,
         lutdir2.mkdir(parents=True, exist_ok=True)
         lrtfile = lutdir2 / "lrt-template.inp"
         vswir_conf = forward_settings["radiative_transfer"]["radiative_transfer_engines"]["vswir"]
-        with open(vswir_conf["template_file"], "r") as f:
+        with open(libradtran_template_file, "r") as f:
             fs = f.read()
             open(lrtfile, "w").write(fs.format(
                 atmosphere=lrt_atmosphere_type, solar_azimuth=solar_azimuth,
@@ -127,7 +130,8 @@ def do_hypertrace(isofit_config,
     return outdir2
 
 
-for noisefile in hypertrace_config.get("instrument_noise"):
+for noisefile_rel in hypertrace_config.get("instrument_noise"):
+    noisefile = mkabs(noisefile_rel)
     print(noisefile)
     for aod in config["hypertrace"]["true_AOD"]:
         print(aod)
@@ -135,6 +139,7 @@ for noisefile in hypertrace_config.get("instrument_noise"):
             print(h2o)
             do_hypertrace(isofit_config, wavelength_file,
                           surface_file, reflectance_file,
+                          libradtran_template_file,
                           noisefile=noisefile, aod=aod, h2o=h2o)
 
 #             fm = ForwardModel(Config({"forward_model": forward_settings}))

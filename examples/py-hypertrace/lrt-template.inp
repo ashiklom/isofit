@@ -12,7 +12,9 @@
 atmosphere_file {atmosphere}
 
 # File path for incident solar spectrum
-source solar /Users/ashiklom/projects/sbg-uncertainty/isofit/data/kurudz_0.1nm.dat
+# Relative to libradtran `test` directory
+# source solar ~/projects/models/libRadtran-2.0.3/test/test.pl.in
+source solar ../data/solar_flux/kurudz_0.1nm.dat
 
 # Albedo -- this will be modified by isofit
 albedo {{albedo}}
