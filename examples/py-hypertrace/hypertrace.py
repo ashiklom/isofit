@@ -16,7 +16,7 @@ from isofit.core.geometry import Geometry
 def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   libradtran_template_file,
                   lutdir, outdir,
-                  surface_file="./uninformative-prior.mat",
+                  surface_file="./data/prior.mat",
                   noisefile=None, snr=300,
                   aod=0.1, h2o=1.0, lrt_atmosphere_type="midlatitude_winter",
                   atm_aod_h2o=None,
