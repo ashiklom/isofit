@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from atexit import register
+import sys
 import json
 import copy
 import pickle
@@ -18,13 +19,21 @@ from isofit.core.geometry import Geometry
 
 from hypertrace import ht_radiance, ht_invert, mkabs
 
-with open("./config.json") as f:
+if len(sys.argv) > 1:
+    configfile = sys.argv[1]
+else:
+    configfile = "./config.json"
+configfile = mkabs(configfile)
+print(f"Using config file `{configfile}`")
+
+with open(configfile) as f:
     config = json.load(f)
 
 wavelength_file = mkabs(config["wavelength_file"])
-surface_file = mkabs(config["surface_file"])
 reflectance_file = mkabs(config["reflectance_file"])
 libradtran_template_file = mkabs(config["libradtran_template_file"])
+lutdir = mkabs(config["lutdir"])
+outdir = mkabs(config["outdir"])
 
 isofit_config = config["isofit"]
 hypertrace_config = config["hypertrace"]
@@ -40,18 +49,77 @@ if not ray.is_initialized():
     register(ray.shutdown)
 
 
-def do_hypertrace(isofit_config,
-                  wavelength_file, surface_file, reflectance_file,
+def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   libradtran_template_file,
+                  lutdir, outdir,
+                  surface_file="./uninformative-prior.mat",
                   noisefile=None, snr=300,
                   aod=0.1, h2o=1.0, lrt_atmosphere_type="midlatitude_winter",
                   atm_aod_h2o=None,
                   solar_zenith=0, observer_zenith=0,
                   solar_azimuth=0, observer_azimuth=0,
-                  create_lut=True,
-                  lutdir="./luts",
-                  outdir="./output"):
-    """One iteration of the hypertrace workflow."""
+                  create_lut=True):
+    """One iteration of the hypertrace workflow.
+
+    Required arguments:
+        isofit_config: dict of isofit configuration options
+
+        `wavelength_file`: Path to ASCII space delimited table containing two
+        columns, wavelength and full width half max (FWHM); both in nanometers.
+
+        `reflectance_file`: Path to input reflectance file. Note that this has
+        to be an ENVI-formatted binary reflectance file, and this path is to the
+        associated header file (`.hdr`), not the image file itself (following
+        the convention of the `spectral` Python library, which will be used to
+        read this file).
+
+        libradtran_template_file: Path to the LibRadtran template. Note that
+        this is slightly different from the Isofit template in that the Isofit
+        fields are surrounded by two sets of `{{` while a few additional options
+        related to geometry are surrounded by just `{` (this is because
+        Hypertrace does an initial pass at formatting the files).
+
+        `lutdir`: Directory where look-up tables will be stored. Will be created
+        if missing.
+
+        `outdir`: Directory where outputs will be stored. Will be created if
+        missing.
+
+    Keyword arguments:
+      surface_file: Matlab (`.mat`) file containing a multicomponent surface
+      prior. See Isofit documentation for details.
+
+      noisefile: Parametric instrument noise file. See Isofit documentation for
+      details. Default = `None`
+
+      snr: Instrument signal-to-noise ratio. Ignored if `noisefile` is present.
+      Default = 300
+
+      aod: True aerosol optical depth. Default = 0.1
+
+      h2o: True water vapor content. Default = 1.0
+
+      lrt_atmosphere_type: LibRadtran atmosphere type. See LibRadtran manual for
+      details. Default = `midlatitude_winter`
+
+      atm_aod_h2o: A list containing three elements: The atmosphere type, AOD,
+      and H2O. This provides a way to iterate over specific known atmospheres
+      that are combinations of the three previous variables. If this is set, it
+      overrides the three previous arguments. Default = `None`
+
+      solar_zenith, `observer_zenith`: Solar and observer zenith angles,
+      respectively (0 = directly overhead, 90 = horizon). These are in degrees
+      off nadir. Default = 0 for both. (Note that off-nadir angles make
+      LibRadtran run _much_ more slowly, so be prepared if you need to generate
+      those LUTs).
+
+      solar_azimuth, `observer_azimuth`: Solar and observer azimuth angles,
+      respectively, in degrees. Observer azimuth is the sensor _position_ (so
+      180 degrees off from view direction) relative to N, rotating
+      counterclockwise; i.e., 0 = Sensor in N, looking S; 90 = Sensor in W,
+      looking E (this follows the LibRadtran convention). Default = 0 for both.
+    """
+
     outdir = mkabs(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     reflectance = spectral.open_image(reflectance_file)
@@ -153,11 +221,13 @@ def do_hypertrace(isofit_config,
 
 # Create iterable config permutation object
 ht_iter = itertools.product(*hypertrace_config.values())
+print("Starting Hypertrace workflow.")
 for ht in ht_iter:
     argd = dict()
     for key, value in zip(hypertrace_config.keys(), ht):
         argd[key] = value
-    print(argd)
-    do_hypertrace(isofit_config, wavelength_file, surface_file,
-                  reflectance_file, libradtran_template_file,
+    print(f"Running config: {argd}")
+    do_hypertrace(isofit_config, wavelength_file, reflectance_file,
+                  libradtran_template_file, lutdir, outdir,
                   **argd)
+print("Workflow completed successfully.")
