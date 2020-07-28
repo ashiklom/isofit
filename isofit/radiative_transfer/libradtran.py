@@ -211,7 +211,9 @@ class LibRadTranRT(TabularRT):
         # so the equation reduces to 0 / 0. Therefore, we assume that spherical
         # albedo here is zero. Any other non-finite results are (currently)
         # unexpected, so we convert them to errors.
-        bad = np.logical_and(rho025 == rhoatm, rho05 == rhoatm)
+        bad1 = np.logical_and(rho025 == rhoatm, rho05 == rhoatm)
+        bad2 = rho025 == rho05
+        bad = np.logical_or(bad1, bad2)
         sphalb = 2.8*(2.0*rho025-rhoatm-rho05)/(rho025-rho05)
         if np.sum(bad) > 0:
             logging.debug('Setting sphalb = 0 where rho025 == rho05 == rhoatm.')
