@@ -6,11 +6,13 @@ import ray
 import pathlib
 import spectral
 import pickle
+import multiprocessing
 
 from isofit.configs.configs import Config
 from isofit.core.forward import ForwardModel
 from isofit.inversion.inverse import Inversion
 from isofit.core.geometry import Geometry
+from isofit.core.fileio import IO
 
 
 def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
@@ -88,7 +90,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     outdir.mkdir(parents=True, exist_ok=True)
     reflectance = spectral.open_image(reflectance_file)
     spatial_dim = reflectance.shape[0:2]
-    reflectance_it = spectral.algorithms.iterator(reflectance)
+    nwl = np.loadtxt(wavelength_file).shape[0]
+    output_dim = np.concatenate((spatial_dim, [nwl]))
 
     isofit_config2 = copy.copy(isofit_config)
     # NOTE: All of these settings are *not* copied, but referenced. So these
@@ -143,6 +146,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
 
     outdir2 = outdir / lrttag / noisetag / atmtag
     outdir2.mkdir(parents=True, exist_ok=True)
+
+    # Create Isofit objects
     fm = ForwardModel(Config({"forward_model": forward_settings}))
     geomvec = [
         -999,              # path length; not used
@@ -152,39 +157,46 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         solar_zenith       # Same units as observer zenith
     ]
     igeom = Geometry(obs=geomvec)
-    # Forward simulation
-    radiance_l = ray.get([ht_radiance.remote(refl, aod, h2o, fm, igeom)
-                          for refl in reflectance_it])
-    nwl = len(radiance_l[0])
-    output_dim = np.concatenate((spatial_dim, [nwl]))
-    radiance = np.reshape(np.asarray(radiance_l), output_dim)
+    inverse_settings = isofit_config2["implementation"]
+    iv = Inversion(Config({"implementation": inverse_settings}), fm)
+
+    # Create output files and associated memmaps
+    reflectance_m = reflectance.open_memmap(writable=False)
+    reflectance_id = ray.put(reflectance_m)
     radiance_img = spectral.envi.create_image(outdir2 / "toa-radiance.hdr",
                                               shape=output_dim,
-                                              dtype=np.float64,
+                                              dtype=np.float32,
                                               force=True)
-    radiance_img_m = radiance_img.open_memmap(writable=True)
-    radiance_img_m[:, :, :] = radiance
-    # Delete memmap to write to disk and free up memory
-    del radiance_img_m
-    inverse_settings = isofit_config["implementation"]
-    inverse_settings["mode"] = "inversion"
-    iv = Inversion(Config({"implementation": inverse_settings}), fm)
-    unc_l = ray.get([ht_invert.remote(rad, iv, igeom) for rad in radiance_l])
-    est_refl_l = [item[0] for item in unc_l]
-    est_refl = np.reshape(np.asarray(est_refl_l), output_dim)
+    radiance_m = radiance_img.open_memmap(writable=True)
+    radiance_id = ray.put(radiance_m)
     est_refl_img = spectral.envi.create_image(outdir2 / "estimated-reflectance.hdr",
                                               shape=output_dim,
-                                              dtype=np.float64,
+                                              dtype=np.float32,
                                               force=True)
-    est_refl_img_m = est_refl_img.open_memmap(writable=True)
-    est_refl_img_m[:, :, :] = est_refl
-    del est_refl_img_m
-    pickle.dump(unc_l, open(outdir2 / "uncertainty.pkl", "wb"))
+    est_refl_m = est_refl_img.open_memmap(writable=True)
+    est_refl_id = ray.put(est_refl_m)
+
+    # Set up indices for parallelization
+    irows, icols = np.nonzero(np.ones(spatial_dim))
+    n_iter = len(irows)
+    if "ncores" in inverse_settings:
+        n_workers = min(inverse_settings["ncores"], n_iter)
+    else:
+        n_workers = min(multiprocessing.cpu_count(), n_iter)
+    print(f"Running on {n_workers} workers")
+    index_sets = np.linspace(0, n_iter, n_workers + 1, dtype=int)
+
+    # Run the workflow (in parallel)
+    _ = ray.get([
+        ht_run.remote(reflectance_id, irows, icols,
+                      radiance_id, est_refl_id,
+                      aod, h2o, fm, iv, igeom,
+                      index_sets[i], index_sets[i + 1])
+        for i in range(len(index_sets)-1)
+    ])
     return outdir2
 
 
-
-@ray.remote
 def ht_radiance(refl, aot, h2o, fm, igeom):
     """Calculate TOA radiance."""
     statevec = np.concatenate((refl, aot, h2o), axis=None)
@@ -192,13 +204,29 @@ def ht_radiance(refl, aot, h2o, fm, igeom):
     return radiance
 
 
-@ray.remote
 def ht_invert(rad, iv, igeom):
     """Invert TOA radiance to get reflectance."""
     state_trajectory = iv.invert(rad, igeom)
     state_est = state_trajectory[-1]
     unc = iv.forward_uncertainty(state_est, rad, igeom)
     return unc
+
+
+@ray.remote
+def ht_run(reflectance, rows, cols,
+           radiance_m, est_refl_m,
+           aod, h2o, fm, iv, igeom,
+           index_start, index_stop):
+    for index in range(index_start, index_stop):
+        ix = rows[index]
+        iy = cols[index]
+        refl = reflectance[ix, iy]
+        rad = ht_radiance(refl, aod, h2o, fm, igeom)
+        radiance_m[ix, iy] = rad
+        unc = ht_invert(rad, iv, igeom)
+        # TODO: Store the rest of this uncertainty information
+        est_refl = unc[0]
+        est_refl_m[ix, iy] = est_refl
 
 
 def mkabs(path):
