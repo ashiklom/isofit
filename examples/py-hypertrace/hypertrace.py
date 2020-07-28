@@ -161,20 +161,16 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     iv = Inversion(Config({"implementation": inverse_settings}), fm)
 
     # Create output files and associated memmaps
-    reflectance_m = reflectance.open_memmap(writable=False)
-    reflectance_id = ray.put(reflectance_m)
-    radiance_img = spectral.envi.create_image(outdir2 / "toa-radiance.hdr",
-                                              shape=output_dim,
-                                              dtype=np.float32,
-                                              force=True)
-    radiance_m = radiance_img.open_memmap(writable=True)
-    radiance_id = ray.put(radiance_m)
-    est_refl_img = spectral.envi.create_image(outdir2 / "estimated-reflectance.hdr",
-                                              shape=output_dim,
-                                              dtype=np.float32,
-                                              force=True)
-    est_refl_m = est_refl_img.open_memmap(writable=True)
-    est_refl_id = ray.put(est_refl_m)
+    radiance_file = outdir2 / "toa-radiance.hdr"
+    spectral.envi.create_image(radiance_file,
+                               shape=output_dim,
+                               dtype=np.float32,
+                               force=True)
+    est_refl_file = outdir2 / "estimated-reflectance.hdr"
+    spectral.envi.create_image(est_refl_file,
+                               shape=output_dim,
+                               dtype=np.float32,
+                               force=True)
 
     # Set up indices for parallelization
     irows, icols = np.nonzero(np.ones(spatial_dim))
@@ -186,11 +182,18 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     print(f"Running on {n_workers} workers")
     index_sets = np.linspace(0, n_iter, n_workers + 1, dtype=int)
 
+    # Cache some immutable objects
+    irows_id = ray.put(irows)
+    icols_id = ray.put(icols)
+    fm_id = ray.put(fm)
+    iv_id = ray.put(iv)
+    igeom_id = ray.put(igeom)
+
     # Run the workflow (in parallel)
     _ = ray.get([
-        ht_run.remote(reflectance_id, irows, icols,
-                      radiance_id, est_refl_id,
-                      aod, h2o, fm, iv, igeom,
+        ht_run.remote(reflectance_file, irows_id, icols_id,
+                      radiance_file, est_refl_file,
+                      aod, h2o, fm_id, iv_id, igeom_id,
                       index_sets[i], index_sets[i + 1])
         for i in range(len(index_sets)-1)
     ])
@@ -213,14 +216,21 @@ def ht_invert(rad, iv, igeom):
 
 
 @ray.remote
-def ht_run(reflectance, rows, cols,
-           radiance_m, est_refl_m,
+def ht_run(reflectance_file, rows, cols,
+           radiance_file, est_refl_file,
            aod, h2o, fm, iv, igeom,
            index_start, index_stop):
+    reflectance = spectral.open_image(reflectance_file)
+    radiance = spectral.open_image(radiance_file)
+    radiance_m = radiance.open_memmap(writable=True)
+    est_refl = spectral.open_image(est_refl_file)
+    est_refl_m = est_refl.open_memmap(writable=True)
     for index in range(index_start, index_stop):
         ix = rows[index]
         iy = cols[index]
         refl = reflectance[ix, iy]
+        if np.all(refl <= 0.0):
+            continue
         rad = ht_radiance(refl, aod, h2o, fm, igeom)
         radiance_m[ix, iy] = rad
         unc = ht_invert(rad, iv, igeom)
