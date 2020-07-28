@@ -216,7 +216,8 @@ def ht_radiance(refl, aot, h2o, fm, igeom):
     """Calculate TOA radiance."""
     statevec = np.concatenate((refl, aot, h2o), axis=None)
     radiance = fm.calc_rdn(statevec, igeom)
-    return radiance
+    sim_radiance = fm.instrument.simulate_measurement(radiance, igeom)
+    return sim_radiance
 
 
 def ht_invert(rad, iv, igeom):
