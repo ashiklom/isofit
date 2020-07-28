@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 import copy
+import pathlib
+import multiprocessing
 import numpy as np
 import ray
-import pathlib
 import spectral
-import pickle
-import multiprocessing
+import scipy
 
 from isofit.configs.configs import Config
 from isofit.core.forward import ForwardModel
@@ -90,14 +90,20 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     outdir.mkdir(parents=True, exist_ok=True)
     reflectance = spectral.open_image(reflectance_file)
     spatial_dim = reflectance.shape[0:2]
-    nwl = np.loadtxt(wavelength_file).shape[0]
-    # TODO: Figure out if this is actually necessary. I think Isofit can
-    # resample reflectance when it calculates TOA radiance...but I'm not sure
-    #
-    # assert reflectance.shape[2] == nwl,\
-    #     f"Wavelengths in reflectance file ({reflectance.shape[2]}) " +\
-    #     f"do not match wavelengths in wavelength file ({nwl}). "
-    output_dim = np.concatenate((spatial_dim, [nwl]))
+    nwl_radiance = np.loadtxt(wavelength_file).shape[0]
+    assert reflectance.shape[2] == nwl_radiance,\
+        f"Wavelengths in reflectance file ({reflectance.shape[2]}) " +\
+        f"do not match wavelengths in instrument wavelength file ({nwl_radiance}). "
+    radiance_dim = np.concatenate((spatial_dim, [nwl_radiance]))
+
+    # The inversion output matches the dimensions of the surface, not the
+    # instrument! However, this isn't handled properly unless both have the same
+    # wavelengths.
+    nwl_surface = scipy.io.loadmat(surface_file)["wl"].shape[1]
+    assert nwl_radiance == nwl_surface,\
+        f"Surface wavelengths ({nwl_surface}) do not match " +\
+        f"instrument wavelengths ({nwl_radiance})."
+    surface_dim = np.concatenate((spatial_dim, [nwl_surface]))
 
     isofit_config2 = copy.copy(isofit_config)
     # NOTE: All of these settings are *not* copied, but referenced. So these
@@ -169,12 +175,12 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     # Create output files and associated memmaps
     radiance_file = outdir2 / "toa-radiance.hdr"
     spectral.envi.create_image(radiance_file,
-                               shape=output_dim,
+                               shape=radiance_dim,
                                dtype=np.float32,
                                force=True)
     est_refl_file = outdir2 / "estimated-reflectance.hdr"
     spectral.envi.create_image(est_refl_file,
-                               shape=output_dim,
+                               shape=surface_dim,
                                dtype=np.float32,
                                force=True)
 
