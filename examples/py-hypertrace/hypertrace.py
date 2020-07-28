@@ -91,6 +91,12 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     reflectance = spectral.open_image(reflectance_file)
     spatial_dim = reflectance.shape[0:2]
     nwl = np.loadtxt(wavelength_file).shape[0]
+    # TODO: Figure out if this is actually necessary. I think Isofit can
+    # resample reflectance when it calculates TOA radiance...but I'm not sure
+    #
+    # assert reflectance.shape[2] == nwl,\
+    #     f"Wavelengths in reflectance file ({reflectance.shape[2]}) " +\
+    #     f"do not match wavelengths in wavelength file ({nwl}). "
     output_dim = np.concatenate((spatial_dim, [nwl]))
 
     isofit_config2 = copy.copy(isofit_config)
@@ -98,10 +104,10 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     # changes propagate to the `forward_settings` object below.
     forward_settings = isofit_config2["forward_model"]
     instrument_settings = forward_settings["instrument"]
+    # NOTE: This also propagates to the radiative transfer engine
     instrument_settings["wavelength_file"] = wavelength_file
     surface_settings = forward_settings["surface"]
     surface_settings["surface_file"] = surface_file
-    surface_settings["wavelength_file"] = wavelength_file
     if noisefile is not None:
         noisetag = f"noise_{pathlib.Path(noisefile).name}"
         if "SNR" in instrument_settings:
