@@ -281,7 +281,10 @@ class Inversion:
 
         # Simulations are easy - return the initial state vector
         if self.mode == 'simulation' or meas is None:
-            return np.array([self.fm.init.copy()])
+            return np.array([np.concatenate((
+                self.fm.surface.rfl,
+                self.fm.init[-self.fm.surface.n_wl:],
+            ))])
 
         if len(self.integration_grid.values()) == 0:
             combo_values = [None]
