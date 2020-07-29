@@ -156,6 +156,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     isofit_fwd = copy.deepcopy(isofit_common)
     isofit_fwd["input"]["reflectance_file"] = str(mkabs(reflectance_file))
     isofit_fwd["implementation"]["mode"] = "simulation"
+    isofit_fwd["implementation"]["inversion"]["simulation_mode"] = True
     radfile = outdir2 / "toa-radiance"
     isofit_fwd["output"] = {"simulated_measurement_file": str(radfile)}
     fwd_state = isofit_fwd["forward_model"]["radiative_transfer"]["statevector"]
@@ -163,7 +164,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     fwd_state["H2OSTR"]["init"] = h2o
 
     fwdfile = outdir2 / "forward.json"
-    json.dump(isofit_fwd, open(fwdfile, "w"))
+    json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
 
     isofit_inv = copy.deepcopy(isofit_common)
     isofit_inv["implementation"]["mode"] = "inversion"
@@ -172,11 +173,11 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file)}
 
     invfile = outdir2 / "inverse.json"
-    json.dump(isofit_inv, open(invfile, "w"))
+    json.dump(isofit_inv, open(invfile, "w"), indent=2)
 
     # Run the workflow
-    Isofit(fwdfile)
-    Isofit(invfile)
+    Isofit(fwdfile).run()
+    Isofit(invfile).run()
 
 
 def mkabs(path):

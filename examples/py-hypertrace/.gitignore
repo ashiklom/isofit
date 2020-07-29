@@ -9,3 +9,13 @@ build
 htmlcov
 
 output/*
+
+# JSON files that are NOT the config example
+*.json
+!config-example.json
+
+# Example look-up table directory
+luts/
+
+# Scratch files (prefixed with zz-)
+zz-*
