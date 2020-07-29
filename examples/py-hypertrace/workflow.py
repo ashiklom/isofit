@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 
-from atexit import register
 import sys
 import json
 import itertools
-
-import ray
 
 from hypertrace import do_hypertrace, mkabs
 
@@ -32,11 +29,7 @@ hypertrace_config = config["hypertrace"]
 vswir_settings = isofit_config["forward_model"]["radiative_transfer"]["radiative_transfer_engines"]["vswir"]
 for key in ["lut_path", "template_file", "engine_base_dir"]:
     if key in vswir_settings:
-        vswir_settings[key] = mkabs(vswir_settings[key])
-
-if not ray.is_initialized():
-    ray.init()
-    register(ray.shutdown)
+        vswir_settings[key] = str(mkabs(vswir_settings[key]))
 
 # Create iterable config permutation object
 ht_iter = itertools.product(*hypertrace_config.values())

@@ -2,17 +2,10 @@
 
 import copy
 import pathlib
-import multiprocessing
+import json
 import numpy as np
-import ray
-import spectral
-import scipy
 
-from isofit.configs.configs import Config
-from isofit.core.forward import ForwardModel
-from isofit.inversion.inverse import Inversion
-from isofit.core.geometry import Geometry
-from isofit.core.fileio import IO
+from isofit.core.isofit import Isofit
 
 
 def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
@@ -88,37 +81,21 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
 
     outdir = mkabs(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    reflectance = spectral.open_image(reflectance_file)
-    spatial_dim = reflectance.shape[0:2]
-    nwl_radiance = np.loadtxt(wavelength_file).shape[0]
-    assert reflectance.shape[2] == nwl_radiance,\
-        f"Wavelengths in reflectance file ({reflectance.shape[2]}) " +\
-        f"do not match wavelengths in instrument wavelength file ({nwl_radiance}). "
-    radiance_dim = np.concatenate((spatial_dim, [nwl_radiance]))
 
-    # The inversion output matches the dimensions of the surface, not the
-    # instrument! However, this isn't handled properly unless both have the same
-    # wavelengths.
-    nwl_surface = scipy.io.loadmat(surface_file)["wl"].shape[1]
-    assert nwl_radiance == nwl_surface,\
-        f"Surface wavelengths ({nwl_surface}) do not match " +\
-        f"instrument wavelengths ({nwl_radiance})."
-    surface_dim = np.concatenate((spatial_dim, [nwl_surface]))
-
-    isofit_config2 = copy.copy(isofit_config)
+    isofit_common = copy.deepcopy(isofit_config)
     # NOTE: All of these settings are *not* copied, but referenced. So these
     # changes propagate to the `forward_settings` object below.
-    forward_settings = isofit_config2["forward_model"]
+    forward_settings = isofit_common["forward_model"]
     instrument_settings = forward_settings["instrument"]
     # NOTE: This also propagates to the radiative transfer engine
-    instrument_settings["wavelength_file"] = wavelength_file
+    instrument_settings["wavelength_file"] = str(mkabs(wavelength_file))
     surface_settings = forward_settings["surface"]
-    surface_settings["surface_file"] = surface_file
+    surface_settings["surface_file"] = str(mkabs(surface_file))
     if noisefile is not None:
         noisetag = f"noise_{pathlib.Path(noisefile).name}"
         if "SNR" in instrument_settings:
             instrument_settings.pop("SNR")
-        instrument_settings["parametric_noise_file"] = noisefile
+        instrument_settings["parametric_noise_file"] = str(mkabs(noisefile))
         if "integrations" not in instrument_settings:
             instrument_settings["integrations"] = 1
     elif snr is not None:
@@ -153,103 +130,53 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                 observer_azimuth=observer_azimuth
             ))
         open(lutdir2 / "prescribed_geom", "w").write(f"99:99:99   {solar_zenith}  {solar_azimuth}")
-        vswir_conf["lut_path"] = lutdir2
-        vswir_conf["template_file"] = lrtfile
+        vswir_conf["lut_path"] = str(lutdir2)
+        vswir_conf["template_file"] = str(lrtfile)
 
     outdir2 = outdir / lrttag / noisetag / atmtag
     outdir2.mkdir(parents=True, exist_ok=True)
 
-    # Create Isofit objects
-    fm = ForwardModel(Config({"forward_model": forward_settings}))
+    # Observation file, which describes the geometry
+    obsfile = outdir2 / "obs.txt"
     geomvec = [
         -999,              # path length; not used
         observer_azimuth,  # Degrees 0-360; 0 = Sensor in N, looking S; 90 = Sensor in W, looking E
         observer_zenith,   # Degrees 0-90; 0 = directly overhead, 90 = horizon
         solar_azimuth,     # Degrees 0-360; 0 = N, 90 = W, 180 = S, 270 = E
-        solar_zenith       # Same units as observer zenith
+        solar_zenith,      # Same units as observer zenith
+        180.0 - abs(observer_zenith),  # MODTRAN OBSZEN -- t
+        observer_azimuth - solar_azimuth + 180.0,  # MODTRAN relative azimuth
+        observer_azimuth,   # MODTRAN azimuth
+        np.cos(observer_zenith * np.pi / 180.0)  # Libradtran cos obsever zenith
     ]
-    igeom = Geometry(obs=geomvec)
-    inverse_settings = isofit_config2["implementation"]
-    iv = Inversion(Config({"implementation": inverse_settings}), fm)
+    np.savetxt(obsfile, np.array([geomvec]))
 
-    # Create output files and associated memmaps
-    radiance_file = outdir2 / "toa-radiance.hdr"
-    spectral.envi.create_image(radiance_file,
-                               shape=radiance_dim,
-                               dtype=np.float32,
-                               force=True)
-    est_refl_file = outdir2 / "estimated-reflectance.hdr"
-    spectral.envi.create_image(est_refl_file,
-                               shape=surface_dim,
-                               dtype=np.float32,
-                               force=True)
+    isofit_common["input"] = {"obs_file": str(obsfile)}
 
-    # Set up indices for parallelization
-    irows, icols = np.nonzero(np.ones(spatial_dim))
-    n_iter = len(irows)
-    if "ncores" in inverse_settings:
-        n_workers = min(inverse_settings["ncores"], n_iter)
-    else:
-        n_workers = min(multiprocessing.cpu_count(), n_iter)
-    print(f"Running on {n_workers} workers")
-    index_sets = np.linspace(0, n_iter, n_workers + 1, dtype=int)
+    isofit_fwd = copy.deepcopy(isofit_common)
+    isofit_fwd["input"]["reflectance_file"] = str(mkabs(reflectance_file))
+    isofit_fwd["implementation"]["mode"] = "simulation"
+    radfile = outdir2 / "toa-radiance"
+    isofit_fwd["output"] = {"simulated_measurement_file": str(radfile)}
+    fwd_state = isofit_fwd["forward_model"]["radiative_transfer"]["statevector"]
+    fwd_state["AOT550"]["init"] = aod
+    fwd_state["H2OSTR"]["init"] = h2o
 
-    # Cache some immutable objects
-    irows_id = ray.put(irows)
-    icols_id = ray.put(icols)
-    fm_id = ray.put(fm)
-    iv_id = ray.put(iv)
-    igeom_id = ray.put(igeom)
+    fwdfile = outdir2 / "forward.json"
+    json.dump(isofit_fwd, open(fwdfile, "w"))
 
-    # Run the workflow (in parallel)
-    _ = ray.get([
-        ht_run.remote(reflectance_file, irows_id, icols_id,
-                      radiance_file, est_refl_file,
-                      aod, h2o, fm_id, iv_id, igeom_id,
-                      index_sets[i], index_sets[i + 1])
-        for i in range(len(index_sets)-1)
-    ])
-    return outdir2
+    isofit_inv = copy.deepcopy(isofit_common)
+    isofit_inv["implementation"]["mode"] = "inversion"
+    isofit_inv["input"]["measured_radiance_file"] = str(radfile)
+    est_refl_file = outdir2 / "estimated-reflectance"
+    isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file)}
 
+    invfile = outdir2 / "inverse.json"
+    json.dump(isofit_inv, open(invfile, "w"))
 
-def ht_radiance(refl, aot, h2o, fm, igeom):
-    """Calculate TOA radiance."""
-    statevec = np.concatenate((refl, aot, h2o), axis=None)
-    radiance = fm.calc_rdn(statevec, igeom)
-    sim_radiance = fm.instrument.simulate_measurement(radiance, igeom)
-    return sim_radiance
-
-
-def ht_invert(rad, iv, igeom):
-    """Invert TOA radiance to get reflectance."""
-    state_trajectory = iv.invert(rad, igeom)
-    state_est = state_trajectory[-1]
-    unc = iv.forward_uncertainty(state_est, rad, igeom)
-    return unc
-
-
-@ray.remote
-def ht_run(reflectance_file, rows, cols,
-           radiance_file, est_refl_file,
-           aod, h2o, fm, iv, igeom,
-           index_start, index_stop):
-    reflectance = spectral.open_image(reflectance_file)
-    radiance = spectral.open_image(radiance_file)
-    radiance_m = radiance.open_memmap(writable=True)
-    est_refl = spectral.open_image(est_refl_file)
-    est_refl_m = est_refl.open_memmap(writable=True)
-    for index in range(index_start, index_stop):
-        ix = rows[index]
-        iy = cols[index]
-        refl = reflectance[ix, iy]
-        if np.all(refl <= 0.0):
-            continue
-        rad = ht_radiance(refl, aod, h2o, fm, igeom)
-        radiance_m[ix, iy] = rad
-        unc = ht_invert(rad, iv, igeom)
-        # TODO: Store the rest of this uncertainty information
-        est_refl = unc[0]
-        est_refl_m[ix, iy] = est_refl
+    # Run the workflow
+    Isofit(fwdfile)
+    Isofit(invfile)
 
 
 def mkabs(path):
