@@ -168,8 +168,10 @@ class Isofit:
                                   geom, flush_immediately=True)
                 if (index - index_start) % 100 == 0:
                     logging.info(
-                        'Core at start index {} completed inversion {}/{}'.format(index_start, index-index_start,
-                                                                                  index_stop-index_start))
+                        'Core at start index %d completed inversion %d/%d',
+                        index_start, 1+index-index_start,
+                        index_stop-index_start
+                    )
 
     def run(self):
         """
