@@ -1,6 +1,6 @@
 {
     "wavelength_file": "./data/wavelengths.txt",
-    "reflectance_file": "./data/reference_reflectance.hdr",
+    "reflectance_file": "./data/reference_reflectance",
     "libradtran_template_file": "./lrt-template.inp",
     "lutdir": "./luts",
     "outdir": "./output",
