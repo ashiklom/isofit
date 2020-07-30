@@ -92,7 +92,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     surface_settings = forward_settings["surface"]
     surface_settings["surface_file"] = str(mkabs(surface_file))
     if noisefile is not None:
-        noisetag = f"noise_{pathlib.Path(noisefile).name}"
+        noisetag = f"noise_{pathlib.Path(noisefile).stem}"
         if "SNR" in instrument_settings:
             instrument_settings.pop("SNR")
         instrument_settings["parametric_noise_file"] = str(mkabs(noisefile))
@@ -101,6 +101,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     elif snr is not None:
         noisetag = f"snr_{snr}"
         instrument_settings["SNR"] = snr
+
+    priortag = f"prior_{pathlib.Path(surface_file).stem}"
 
     if atm_aod_h2o is not None:
         lrt_atmosphere_type = atm_aod_h2o[0]
@@ -133,7 +135,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         vswir_conf["lut_path"] = str(lutdir2)
         vswir_conf["template_file"] = str(lrtfile)
 
-    outdir2 = outdir / lrttag / noisetag / atmtag
+    outdir2 = outdir / lrttag / noisetag / priortag / atmtag
     outdir2.mkdir(parents=True, exist_ok=True)
 
     # Observation file, which describes the geometry
