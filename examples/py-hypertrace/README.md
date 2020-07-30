@@ -7,7 +7,10 @@ Objective: Starting from known surface reflectance and atmospheric conditions, s
 First, make sure you have Isofit installed.
 In addition, you will need to have a working compiled version of the LibRadtran atmospheric radiative transfer model (see Installation section below).
 
-Make a local copy of the `config-example.json` and modify to fit your system (most important is radiative transfer engine base directly and environment.
+Second, download the support datasets from here: https://github.com/ashiklom/isofit/releases/tag/hypertrace-data (~60 MB compressed, ~135 MB uncompressed).
+Extract these into the `examples/py-hypertrace/` directory (so that you have a `examples/py-hypertrace/hypertrace-data` folder).
+
+Finally, make a local copy of the `config-example.json` and modify to fit your system (most important is radiative transfer engine base directly and environment.
 
 ``` sh
 cp config-example.json myconfig.json
@@ -72,15 +75,15 @@ First, download Isofit and checkout this branch.
 ``` sh
 git clone https://github.com/ashiklom/isofit
 cd isofit
-git checkout r-hypertrace
+git checkout py-hypertrace
 ```
 
 Create a new conda environment and activate it.
 
 ``` sh
-conda create -n r-isofit python
+conda create -n hypertrace python
 # Go through the interactive prompts...
-conda activate r-isofit
+conda activate hypertrace
 ```
 
 Install Isofit and its dependencies.
@@ -88,6 +91,8 @@ Install Isofit and its dependencies.
 ``` sh
 # From inside the isofit root directory (same directory as README.rst, LICENSE, etc.)
 pip install .
+# Alternatively, if you are in the `examples/py-hypertrace` directory, you can do:
+pip install ../..
 ```
 
 ### Libradtran
