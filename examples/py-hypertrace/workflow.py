@@ -6,8 +6,11 @@ import itertools
 
 from hypertrace import do_hypertrace, mkabs
 
+clean = False
 if len(sys.argv) > 1:
     configfile = sys.argv[1]
+    if "--clean" in sys.argv:
+        clean = True
 else:
     configfile = "./config.json"
 configfile = mkabs(configfile)
@@ -21,6 +24,10 @@ reflectance_file = mkabs(config["reflectance_file"])
 libradtran_template_file = mkabs(config["libradtran_template_file"])
 lutdir = mkabs(config["lutdir"])
 outdir = mkabs(config["outdir"])
+
+if clean and outdir.exists:
+    import shutil
+    shutil.rmtree(outdir)
 
 isofit_config = config["isofit"]
 hypertrace_config = config["hypertrace"]
