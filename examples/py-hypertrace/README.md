@@ -25,9 +25,9 @@ Like Isofit, the configuration file is a `json` file.
 Top level settings are as follows:
 
 - `wavelength_file` -- Path to ASCII space delimited table containing two columns, wavelength and full width half max (FWHM); both in nanometers.
-- `reflectance_file` -- Path to input reflectance file. Note that this has to be an ENVI-formatted binary reflectance file, and this path is to the **associated header file** (`.hdr`), not the image file itself (following the convention of the `spectral` Python library, which will be used to read this file).
-- `libradtran_template_file` -- Path to the LibRadtran template. Note that this is slightly different from the Isofit template in that the Isofit fields are surrounded by two sets of `{{` while a few additional options related to geometry are surrounded by just `{` (this is because Hypertrace does an initial pass at formatting the files).
-- `lutdir` -- Directory where look-up tables will be stored. Will be created if missing.
+- `reflectance_file` -- Path to input reflectance file. This has to be an ENVI-formatted binary reflectance file, in BIL (band interleave line) or BIP (band interleave pixel) format. If the image name is `data/myimage`, it must have an associated header file called `data/myimage.hdr` that _must_ have, among other things, metadata on the wavelengths in the `wavelength` field.
+- `libradtran_template_file` -- Path to the LibRadtran template. Note that this is different from the Isofit template in that the Isofit fields are surrounded by two sets of `{{` while a few additional options related to geometry are surrounded by just `{` (this is because Hypertrace does an initial pass at formatting the files).
+- `lutdir` -- Directory where atmospheric look-up tables will be stored. Will be created if missing.
 - `outdir` -- Directory where outputs will be stored. Will be created if missing.
 - `isofit` -- Isofit configuration options (`forward_model`, `implementation`, etc.). This is included to allow you maximum flexiblity in modifying the behavior of Isofit. See the Isofit documentation for more details. Note that some of these will be overwritten by the Hypertrace workflow.
 - `hypertrace` -- Each of these is a list of variables that will be iterated as part of Hypertrace. Specifically, Hypertrace will generate the factorial combination of every one of these lists and perform the workflow for each element of that list. Every keyword argument to the `do_hypertrace` function is supported (indeed, that's how they are passed in, via the `**kwargs` mechanism), and include the following:
@@ -38,7 +38,8 @@ Top level settings are as follows:
     - `h2o` -- True water vapor content. Default = 1.0
     - `lrt_atmosphere_type` -- LibRadtran atmosphere type. See LibRadtran manual for details. Default = `midlatitude_winter`
     - `atm_aod_h2o` -- A list containing three elements: The atmosphere type, AOD, and H2O. This provides a way to iterate over specific known atmospheres that are combinations of the three previous variables. If this is set, it overrides the three previous arguments. Default = `None`
-    - `solar_zenith`, `observer_zenith` -- Solar and observer zenith angles, respectively (0 = directly overhead, 90 = horizon). These are in degrees off nadir. Default = 0 for both. (Note that off-nadir angles make LibRadtran run _much_ more slowly, so be prepared if you need to generate those LUTs).
+        - For example, `"atm_aod_h2o": [["midlatitude_winter", 0.1, 2.0], ["midlatitude_summer", 0.08, 1.5]]` means to iterate over _two_ atmospheres. On the other hand, a config like `"atm": ["midlatitude_winter", "midlatitude_summer"], "aod": [0.1, 0.08], "h2o": [2.0, 1.5]` would run 2 x 2 x 2 = 8 atmospheres -- one for each combination of these three fields.
+    - `solar_zenith`, `observer_zenith` -- Solar and observer zenith angles, respectively (0 = directly overhead, 90 = horizon). These are in degrees off nadir. Default = 0 for both. (Note that using LibRadtran to generate look up tables for off-nadir angles is ~10x slower than at nadir; however, this step only affects the LUT generation, so it shouldn't introduce additional delay if these LUTs already exist).
     - `solar_azimuth`, `observer_azimuth` -- Solar and observer azimuth angles, respectively, in degrees. Observer azimuth is the sensor _position_ (so 180 degrees off from view direction) relative to N, rotating counterclockwise; i.e., 0 = Sensor in N, looking S; 90 = Sensor in W, looking E (this follows the LibRadtran convention). Default = 0 for both.
     
 ## Installation
