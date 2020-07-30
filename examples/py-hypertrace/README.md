@@ -57,6 +57,7 @@ Top level settings are as follows:
         - `"mcmc_inversion"` -- MCMC inversion using Metropolis-Hastings algorithm. Note that this probably takes significantly longer than the default.
             - If you use this option, you are advised to set `isofit.implementation.inversion.mcmc.verbose = False` in your JSON config file. Otherwise, this will print to screen at _every_ MCMC iteration, which is 10,000 times per inversion!
         - `"simple"` -- Algebraic inversion. This uses the same underlying code as `"inversion"`, but for the least-squares optimization step, sets the number of function evaluations to 1. This works because Isofit uses the algebraic inversion as its initial condition.
+    - `create_lut` -- If `true` (default), use LibRadtran to create look-up tables as necessary. If `false`, use whatever LUT configuration (path, engine, etc.) you provided in the Isofit config (note that this is untested and experimental).
     
 ## Installation
 
