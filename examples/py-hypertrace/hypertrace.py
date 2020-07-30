@@ -3,7 +3,9 @@
 import copy
 import pathlib
 import json
+
 import numpy as np
+from scipy.io import loadmat
 
 from isofit.core.isofit import Isofit
 
@@ -159,8 +161,21 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     isofit_fwd["input"]["reflectance_file"] = str(mkabs(reflectance_file))
     isofit_fwd["implementation"]["mode"] = "simulation"
     isofit_fwd["implementation"]["inversion"]["simulation_mode"] = True
-    isofit_fwd["forward_model"]["surface"]["surface_category"] = "surface"
-    isofit_fwd["forward_model"]["surface"]["wavelength_file"] = str(mkabs(wavelength_file))
+    fwd_surface = isofit_fwd["forward_model"]["surface"]
+    fwd_surface["surface_category"] = "surface"
+
+    # Check that prior and wavelength file have the same dimensions
+    prior = loadmat(mkabs(surface_file))
+    prior_wl = prior["wl"][0]
+    prior_nwl = len(prior_wl)
+    file_wl = np.loadtxt(wavelength_file)
+    file_nwl = file_wl.shape[0]
+    assert prior_nwl == file_nwl, \
+        f"Mismatch between wavelength file ({file_nwl}) " +\
+        f"and prior ({prior_nwl})."
+
+    fwd_surface["wavelength_file"] = str(wavelength_file)
+
     radfile = outdir2 / "toa-radiance"
     isofit_fwd["output"] = {"simulated_measurement_file": str(radfile)}
     fwd_state = isofit_fwd["forward_model"]["radiative_transfer"]["statevector"]
