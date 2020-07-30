@@ -157,6 +157,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     isofit_fwd["input"]["reflectance_file"] = str(mkabs(reflectance_file))
     isofit_fwd["implementation"]["mode"] = "simulation"
     isofit_fwd["implementation"]["inversion"]["simulation_mode"] = True
+    isofit_fwd["forward_model"]["surface"]["surface_category"] = "surface"
+    isofit_fwd["forward_model"]["surface"]["wavelength_file"] = str(mkabs(wavelength_file))
     radfile = outdir2 / "toa-radiance"
     isofit_fwd["output"] = {"simulated_measurement_file": str(radfile)}
     fwd_state = isofit_fwd["forward_model"]["radiative_transfer"]["statevector"]
