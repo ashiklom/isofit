@@ -15,7 +15,10 @@ output/*
 !config-example.json
 
 # Example look-up table directory
-luts/
+/luts/
+
+# Recommended hypertrace data directory
+/hypertrace-data
 
 # Scratch files (prefixed with zz-)
 zz-*
