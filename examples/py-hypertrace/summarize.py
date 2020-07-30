@@ -35,7 +35,8 @@ def parse_dir(ddir, parent):
         r"saz_(?P<saz>[0-9.]+)__" +
         r"oaz_(?P<oaz>[0-9.]+)/" +
         r"(?:noise_(?P<noise>.*)|snr_(?P<snr>[0-9.]+))/" +
-        r"prior_(?P<prior>.*)/" +
+        r"prior_(?P<prior>.*)__" +
+        r"inversion_(?P<inversion>.*)/" +
         r"aod_(?P<aod>[0-9.]+)__" +
         r"h2o_(?P<h2o>[0-9.]+)"
     )

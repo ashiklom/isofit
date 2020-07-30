@@ -19,6 +19,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   atm_aod_h2o=None,
                   solar_zenith=0, observer_zenith=0,
                   solar_azimuth=0, observer_azimuth=0,
+                  inversion_mode="inversion",
                   create_lut=True):
     """One iteration of the hypertrace workflow.
 
@@ -68,17 +69,20 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
       that are combinations of the three previous variables. If this is set, it
       overrides the three previous arguments. Default = `None`
 
-      solar_zenith, `observer_zenith`: Solar and observer zenith angles,
+      solar_zenith, observer_zenith: Solar and observer zenith angles,
       respectively (0 = directly overhead, 90 = horizon). These are in degrees
       off nadir. Default = 0 for both. (Note that off-nadir angles make
       LibRadtran run _much_ more slowly, so be prepared if you need to generate
       those LUTs).
 
-      solar_azimuth, `observer_azimuth`: Solar and observer azimuth angles,
+      solar_azimuth, observer_azimuth: Solar and observer azimuth angles,
       respectively, in degrees. Observer azimuth is the sensor _position_ (so
       180 degrees off from view direction) relative to N, rotating
       counterclockwise; i.e., 0 = Sensor in N, looking S; 90 = Sensor in W,
       looking E (this follows the LibRadtran convention). Default = 0 for both.
+
+      inversion_mode: Inversion algorithm to use. Must be either "inversion"
+      (default) for standard optimal estimation, or "mcmc_inversion" for MCMC.
     """
 
     outdir = mkabs(outdir)
@@ -104,7 +108,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         noisetag = f"snr_{snr}"
         instrument_settings["SNR"] = snr
 
-    priortag = f"prior_{pathlib.Path(surface_file).stem}"
+    priortag = f"prior_{pathlib.Path(surface_file).stem}__" +\
+        "inversion_{inversion_mode}"
 
     if atm_aod_h2o is not None:
         lrt_atmosphere_type = atm_aod_h2o[0]
@@ -186,7 +191,14 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
 
     isofit_inv = copy.deepcopy(isofit_common)
-    isofit_inv["implementation"]["mode"] = "inversion"
+    if inversion_mode == "simple":
+        # Special case! Use the optimal estimation code, but set `max_nfev` to 1.
+        inversion_mode = "inversion"
+        imp_inv = isofit_inv["implementation"]["inversion"]
+        if "least_squares_params" not in imp_inv:
+            imp_inv["least_sqares_params"] = {}
+        imp_inv["least_squares_params"]["max_nfev"] = 1
+    isofit_inv["implementation"]["mode"] = inversion_mode
     isofit_inv["input"]["measured_radiance_file"] = str(radfile)
     est_refl_file = outdir2 / "estimated-reflectance"
     isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file)}
