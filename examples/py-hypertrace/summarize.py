@@ -20,6 +20,7 @@ with open(configfile, "r") as f:
 outdir = Path(config["outdir"])
 
 reflfiles = list(outdir.glob("**/estimated-reflectance"))
+assert len(reflfiles) > 0, f"No reflectance files found in directory {outdir}"
 
 true_refl_file = Path(config["reflectance_file"]).expanduser()
 true_reflectance = sp.open_image(str(true_refl_file) + ".hdr")
@@ -28,31 +29,25 @@ true_refl_m = true_reflectance.open_memmap()
 
 windows = config["isofit"]["implementation"]["inversion"]["windows"]
 
-
-def parse_dir(ddir, parent):
-    dir_pattern = re.compile(
-        str(parent) + "/" +
-        r"atm_(?P<atm>.*)__" +
-        r"szen_(?P<szen>[0-9.]+)__" +
-        r"ozen_(?P<ozen>[0-9.]+)__" +
-        r"saz_(?P<saz>[0-9.]+)__" +
-        r"oaz_(?P<oaz>[0-9.]+)/" +
-        r"(?:noise_(?P<noise>.*)|snr_(?P<snr>[0-9.]+))/" +
-        r"prior_(?P<prior>.*)__" +
-        r"inversion_(?P<inversion>.*)/" +
-        r"aod_(?P<aod>[0-9.]+)__" +
-        r"h2o_(?P<h2o>[0-9.]+)"
-    )
-    grps = dir_pattern.match(str(ddir)).groupdict()
-    for key in ["szen", "ozen", "saz", "oaz", "aod", "h2o"]:
-        if key in grps:
-            grps[key] = float(grps[key])
+def parse_dir(ddir):
+    grps = {"directory": [str(ddir)]}
+    for key in ["atm", "noise", "prior", "inversion"]:
+        pat = f".*{key}_(.+?)" + r"(__|/|\Z)"
+        match = re.match(pat, str(ddir))
+        if match is not None:
+            match = match.group(1)
+        grps[key] = [match]
+    for key in ["szen", "ozen", "saz", "oaz", "snr", "aod", "h2o"]:
+        pat = f".*{key}_([0-9.]+)" + r"(__|/|\Z)"
+        match = re.match(pat, str(ddir))
+        if match is not None:
+            match = float(match.group(1))
+        grps[key] = [match]
     return pd.DataFrame(grps, index=[0])
 
 
-info = pd.concat([parse_dir(x.parent, outdir) for x in reflfiles])\
+info = pd.concat([parse_dir(x.parent) for x in reflfiles])\
          .reset_index(drop=True)
-info["reflectance"] = reflfiles
 
 
 def mask_windows(data, waves, windows):
@@ -70,9 +65,9 @@ info["rmse"] = np.nan
 info["bias"] = np.nan
 info["rel_bias"] = np.nan
 for i in range(info.shape[0]):
-    f = info["reflectance"][i]
-    ddir = f.parent
-    est_refl = sp.open_image(str(f) + ".hdr")
+    ddir = Path(info["directory"][i])
+    est_refl_file = ddir / "estimated-reflectance"
+    est_refl = sp.open_image(str(est_refl_file) + ".hdr")
     est_refl_waves = np.array(est_refl.metadata["wavelength"], dtype=float)
     est_refl_m = est_refl.open_memmap()
     if est_refl_m.shape != true_refl_m.shape:
@@ -109,9 +104,3 @@ print("Simulations sorted by RMSE (lowest first)")
 print(info.sort_values("rmse"))
 
 info.to_csv(outdir / "summary.csv")
-
-# plt.plot(
-#     est_refl_waves,
-#     np.moveaxis(bias, 2, 0).reshape((len(est_refl_waves), -1)),
-# )
-# plt.show()
