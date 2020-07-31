@@ -4,13 +4,16 @@ from pathlib import Path
 import re
 import json
 import copy
+import sys
 
 import numpy as np
 import pandas as pd
 import spectral as sp
 import matplotlib.pyplot as plt
 
-configfile = "./configs/quick.json"
+assert len(sys.argv) > 1, "Please specify a JSON config file."
+
+configfile = sys.argv[1]
 with open(configfile, "r") as f:
     config = json.load(f)
 
