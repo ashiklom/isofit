@@ -54,11 +54,11 @@
     },
     "hypertrace": {
         "atm_aod_h2o": [["midlatitude_winter", 0.2, 1.0], ["midlatitude_winter", 0.3, 2.0]],
+        "observer_zenith": [0.0, 20.0],
+        "inversion_mode": ["simple", "inversion"],
         "noisefile": ["./hypertrace-data/noise/noise_coeff_sbg_cbe0.txt",
-                      "./hypertrace-data/noise/noise_coeff_sbg_cbe1.txt",
-                      "./hypertrace-data/noise/noise_coeff_sbg_cbe2.txt",
-                      "./hypertrace-data/noise/noise_coeff_sbg_cbe3.txt",
-                      "./hypertrace-data/noise/noise_coeff_sbg_cbe4.txt"],
-        "surface_file": ["./hypertrace-data/priors/uninformative.mat"]
+                      "./hypertrace-data/noise/noise_coeff_sbg_cbe1.txt"],
+        "surface_file": ["./hypertrace-data/priors/uninformative.mat",
+                        "./hypertrace-data/priors/basemap_surface_model.mat"]
     }
 }
