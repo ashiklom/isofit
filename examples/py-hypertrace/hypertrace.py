@@ -196,7 +196,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         inversion_mode = "inversion"
         imp_inv = isofit_inv["implementation"]["inversion"]
         if "least_squares_params" not in imp_inv:
-            imp_inv["least_sqares_params"] = {}
+            imp_inv["least_squares_params"] = {}
         imp_inv["least_squares_params"]["max_nfev"] = 1
     isofit_inv["implementation"]["mode"] = inversion_mode
     isofit_inv["input"]["measured_radiance_file"] = str(radfile)

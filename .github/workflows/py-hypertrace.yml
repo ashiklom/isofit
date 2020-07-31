@@ -44,8 +44,11 @@ jobs:
     - name: Run continuous integration workflow
       run: |
         cd examples/py-hypertrace
-        python workflow.py config-example.json
-        python summarize.py config-example.json
+        # Modify the workflow file for GitHub actions
+        export LIBRADTRAN_DIR=$GITHUB_WORKSPACE/libRadtran-2.0.3
+        jq -r ".isofit.forward_model.radiative_transfer.radiative_transfer_engines.vswir += {\"engine_base_dir\": \"/$GITHUB_WORKSPACE/libRadtran-2.0.3\", \"environment\": \"\"}" config-example.json > config.json
+        python workflow.py config.json
+        python summarize.py config.json
 
     - name: Upload summary from CI workflow
       uses: actions/upload-artifact@v2
