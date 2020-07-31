@@ -26,6 +26,9 @@ Hypertrace also ships with a script to quickly calculate some basic summary stat
 This script also takes the config file as an input:
 
 ``` sh
+# NOTE that this also depends on pandas, so if you don't have it installed in
+# your environment, run:
+#     pip install pandas
 python summarize.py myconfig.json
 ```
 
