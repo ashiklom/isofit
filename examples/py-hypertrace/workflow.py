@@ -25,7 +25,7 @@ libradtran_template_file = mkabs(config["libradtran_template_file"])
 lutdir = mkabs(config["lutdir"])
 outdir = mkabs(config["outdir"])
 
-if clean and outdir.exists:
+if clean and outdir.exists():
     import shutil
     shutil.rmtree(outdir)
 

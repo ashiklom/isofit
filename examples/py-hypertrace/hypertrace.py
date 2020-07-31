@@ -109,7 +109,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         instrument_settings["SNR"] = snr
 
     priortag = f"prior_{pathlib.Path(surface_file).stem}__" +\
-        "inversion_{inversion_mode}"
+        f"inversion_{inversion_mode}"
 
     if atm_aod_h2o is not None:
         lrt_atmosphere_type = atm_aod_h2o[0]
