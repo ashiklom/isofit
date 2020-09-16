@@ -1,7 +1,7 @@
 {
     "wavelength_file": "./hypertrace-data/priors/avirisc-wavelengths.txt",
     "reflectance_file": "./hypertrace-data/reflectance/reference/reference_reflectance",
-    "libradtran_template_file": "./lrt-template.inp",
+    "rtm_template_file": "./lrt-template.inp",
     "lutdir": "./luts",
     "outdir": "./output",
     "isofit": {
