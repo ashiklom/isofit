@@ -61,8 +61,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
 
       h2o: True water vapor content. Default = 1.0
 
-      lrt_atmosphere_type: LibRadtran atmosphere type. See LibRadtran manual for
-      details. Default = `midlatitude_winter`
+      lrt_atmosphere_type: LibRadtran or Modtran atmosphere type. See RTM
+      manuals for details. Default = `midlatitude_winter`
 
       atm_aod_h2o: A list containing three elements: The atmosphere type, AOD,
       and H2O. This provides a way to iterate over specific known atmospheres
@@ -150,7 +150,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
             mod = fdict["MODTRAN"][0]["MODTRANINPUT"]
             for key in ['MODEL', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6']:
                 mod['ATMOSPHERE'][key] = lrt_atmosphere_type
-            mod["GEOMETRY"]["PARM1"] = solar_azimuth
+            mod["GEOMETRY"]["PARM1"] = 180 - solar_azimuth
             mod["GEOMETRY"]["PARM2"] = solar_zenith
             # TODO: Is this angle correct?
             mod["GEOMETRY"]["OBSZEN"] = observer_zenith
