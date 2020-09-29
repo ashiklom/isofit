@@ -227,6 +227,21 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     Isofit(fwdfile).run()
     Isofit(invfile).run()
 
+    if use_empirical_line:
+        print("Applying empirical line...")
+        empirical_line(reference_radiance_file=str(rdn_subs_path),
+                       reference_reflectance_file=str(rfl_subs_path),
+                       reference_uncertainty_file=str(unc_subs_path),
+                       reference_locations_file=None,
+                       segmentation_file=str(lbl_working_path),
+                       input_radiance_file=str(radfile),
+                       input_locations_file=None,
+                       output_reflectance_file=str(est_refl_file),
+                       output_uncertainty_file=str(post_unc_path),
+                       isofit_config=str(invfile))
+       
+    print("Done!")
+
 
 def mkabs(path):
     """Make a path absolute."""
