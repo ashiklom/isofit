@@ -111,8 +111,11 @@ def _run_chunk(start_line: int, stop_line: int, reference_radiance_file: str, re
     n_output_uncertainty_bands = int(output_uncertainty_img.metadata['bands'])
 
     # Load reference data
-    reference_locations_mm = reference_locations_img.open_memmap(interleave='source', writable=False)
-    reference_locations = np.array(reference_locations_mm[:, :, :]).reshape((n_reference_lines, n_location_bands))
+    if has_loc:
+        reference_locations_mm = reference_locations_img.open_memmap(interleave='source', writable=False)
+        reference_locations = np.array(reference_locations_mm[:, :, :]).reshape((n_reference_lines, n_location_bands))
+    else:
+        reference_locations = np.zeros((n_reference_lines, 1))
 
     reference_radiance_mm = reference_radiance_img.open_memmap(interleave='source', writable=False)
     reference_radiance = np.array(reference_radiance_mm[:, :, :]).reshape((n_reference_lines, n_radiance_bands))
@@ -242,7 +245,8 @@ def _run_chunk(start_line: int, stop_line: int, reference_radiance_file: str, re
                                                                               int(stop_line - start_line),
                                                                               round(float(nspectra) / elapsed, 2)))
 
-        del input_locations_mm
+        if has_loc:
+            del input_locations_mm
         del input_radiance_mm
 
         output_reflectance_row = output_reflectance_row.transpose((1, 0))
