@@ -218,7 +218,32 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     isofit_inv["implementation"]["mode"] = inversion_mode
     isofit_inv["input"]["measured_radiance_file"] = str(radfile)
     est_refl_file = outdir2 / "estimated-reflectance"
-    isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file)}
+    post_unc_path = outdir2 / "posterior-uncertainty"
+
+    # Inverse mode
+    if use_empirical_line:
+        # Segment first, then run on segmented file
+        SEGMENTATION_SIZE = 40
+        CHUNKSIZE = 256
+        lbl_working_path = radfile.parent / "segmentation-file"
+        rdn_subs_path = radfile.with_name("toa-radiance-subs")
+        rfl_subs_path = est_refl_file.with_name("estimated-reflectance-subs")
+        unc_subs_path = post_unc_path.with_name("posterior-uncertainty-subs")
+        print("Segmenting...")
+        segment(spectra=(str(radfile), str(lbl_working_path)),
+                flag=-9999, npca=5, segsize=SEGMENTATION_SIZE, nchunk=CHUNKSIZE)
+        print("Extracting...")
+        extractions(inputfile=str(radfile), labels=str(lbl_working_path),
+                    output=str(rdn_subs_path), chunksize=CHUNKSIZE, flag=-9999)
+        isofit_inv["input"]["measured_radiance_file"] = str(rdn_subs_path)
+        isofit_inv["output"] = {"estimated_reflectance_file":  str(rfl_subs_path),
+                                "posterior_uncertainty_file": str(unc_subs_path)}
+
+    else:
+        # Run Isofit directly
+        isofit_inv["input"]["measured_radiance_file"] = str(radfile)
+        isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file),
+                                "posterior_uncertainty_file": str(post_unc_path)}
 
     invfile = outdir2 / "inverse.json"
     json.dump(isofit_inv, open(invfile, "w"), indent=2)
