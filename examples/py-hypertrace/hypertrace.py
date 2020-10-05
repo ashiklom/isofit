@@ -20,7 +20,9 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   solar_zenith=0, observer_zenith=0,
                   solar_azimuth=0, observer_azimuth=0,
                   inversion_mode="inversion",
-                  create_lut=True):
+                  use_empirical_line=False,
+                  create_lut=True,
+                  overwrite=False):
     """One iteration of the hypertrace workflow.
 
     Required arguments:
@@ -83,6 +85,14 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
 
       inversion_mode: Inversion algorithm to use. Must be either "inversion"
       (default) for standard optimal estimation, or "mcmc_inversion" for MCMC.
+
+      use_empirical_line: (boolean, default = `False`) If `True`, perform
+      atmospheric correction on a segmented image and then resample using the
+      empirical line method. If `False`, run Isofit pixel-by-pixel.
+
+      overwrite: (boolean, default = `False`) If `False` (default), skip steps
+      where output files already exist. If `True`, run the full workflow
+      regardless of existing files.
     """
 
     outdir = mkabs(outdir)
@@ -204,9 +214,16 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     fwd_state["AOT550"]["init"] = aod
     fwd_state["H2OSTR"]["init"] = h2o
 
-    fwdfile = outdir2 / "forward.json"
-    json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
+    # Run forward mode
+    if not overwrite and radfile.exists():
+        print("Forward file exists. Skipping forward simulation.")
+    else:
+        fwdfile = outdir2 / "forward.json"
+        json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
+        # TODO: Implement segmentation / empirical line here too?
+        Isofit(fwdfile).run()
 
+    # Configure inverse mode
     isofit_inv = copy.deepcopy(isofit_common)
     if inversion_mode == "simple":
         # Special case! Use the optimal estimation code, but set `max_nfev` to 1.
@@ -229,15 +246,18 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         rdn_subs_path = radfile.with_name("toa-radiance-subs")
         rfl_subs_path = est_refl_file.with_name("estimated-reflectance-subs")
         unc_subs_path = post_unc_path.with_name("posterior-uncertainty-subs")
-        print("Segmenting...")
-        segment(spectra=(str(radfile), str(lbl_working_path)),
-                flag=-9999, npca=5, segsize=SEGMENTATION_SIZE, nchunk=CHUNKSIZE)
-        print("Extracting...")
-        extractions(inputfile=str(radfile), labels=str(lbl_working_path),
-                    output=str(rdn_subs_path), chunksize=CHUNKSIZE, flag=-9999)
         isofit_inv["input"]["measured_radiance_file"] = str(rdn_subs_path)
         isofit_inv["output"] = {"estimated_reflectance_file":  str(rfl_subs_path),
                                 "posterior_uncertainty_file": str(unc_subs_path)}
+        if not overwrite and lbl_working_path.exists() and rdn_subs_path.exists():
+            print("Skipping segmentation and extraction because files exist.")
+        else:
+            print("Segmenting...")
+            segment(spectra=(str(radfile), str(lbl_working_path)),
+                    flag=-9999, npca=5, segsize=SEGMENTATION_SIZE, nchunk=CHUNKSIZE)
+            print("Extracting...")
+            extractions(inputfile=str(radfile), labels=str(lbl_working_path),
+                        output=str(rdn_subs_path), chunksize=CHUNKSIZE, flag=-9999)
 
     else:
         # Run Isofit directly
@@ -245,26 +265,29 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file),
                                 "posterior_uncertainty_file": str(post_unc_path)}
 
-    invfile = outdir2 / "inverse.json"
-    json.dump(isofit_inv, open(invfile, "w"), indent=2)
-
-    # Run the workflow
-    Isofit(fwdfile).run()
-    Isofit(invfile).run()
+    if not overwrite and pathlib.Path(isofit_inv["output"]["estimated_reflectance_file"]).exists():
+        print("Skipping inversion because output file exists.")
+    else:
+        invfile = outdir2 / "inverse.json"
+        json.dump(isofit_inv, open(invfile, "w"), indent=2)
+        Isofit(invfile).run()
 
     if use_empirical_line:
-        print("Applying empirical line...")
-        empirical_line(reference_radiance_file=str(rdn_subs_path),
-                       reference_reflectance_file=str(rfl_subs_path),
-                       reference_uncertainty_file=str(unc_subs_path),
-                       reference_locations_file=None,
-                       segmentation_file=str(lbl_working_path),
-                       input_radiance_file=str(radfile),
-                       input_locations_file=None,
-                       output_reflectance_file=str(est_refl_file),
-                       output_uncertainty_file=str(post_unc_path),
-                       isofit_config=str(invfile))
-       
+        if not overwrite and est_refl_file.exists():
+            print("Skipping empirical line because output exists.")
+        else:
+            print("Applying empirical line...")
+            empirical_line(reference_radiance_file=str(rdn_subs_path),
+                           reference_reflectance_file=str(rfl_subs_path),
+                           reference_uncertainty_file=str(unc_subs_path),
+                           reference_locations_file=None,
+                           segmentation_file=str(lbl_working_path),
+                           input_radiance_file=str(radfile),
+                           input_locations_file=None,
+                           output_reflectance_file=str(est_refl_file),
+                           output_uncertainty_file=str(post_unc_path),
+                           isofit_config=str(invfile))
+
     print("Done!")
 
 
