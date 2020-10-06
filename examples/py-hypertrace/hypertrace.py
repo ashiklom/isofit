@@ -8,6 +8,7 @@ import numpy as np
 from scipy.io import loadmat
 
 from isofit.core.isofit import Isofit
+from isofit.utils import empirical_line, segment, extractions
 
 
 def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
