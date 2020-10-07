@@ -286,9 +286,9 @@ def sample_calibration_uncertainty(input_file: pathlib.Path,
     # Here, we assume that the calibration bias is constant across the entire
     # image (i.e., the same bias is added to all pixels).
     z = np.random.normal(size=cov_l.shape[0], scale=bias_scale)
-    Az = cov_l @ z
+    Az = 1.0 + cov_l @ z
     # Resample the added noise vector to match the wavelengths of the target
     # image.
     Az_resampled = interp1d(cov_wl, Az)(rad_wl)
-    img_m += Az_resampled
+    img_m *= Az_resampled
     return output_file
