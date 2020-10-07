@@ -3,12 +3,16 @@
 import copy
 import pathlib
 import json
+import shutil
+import logging
 
+import spectral as sp
 import numpy as np
 from scipy.io import loadmat
 
 from isofit.core.isofit import Isofit
 
+logger = logging.getLogger("hypertrace")
 
 def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   rtm_template_file,
@@ -208,7 +212,9 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
 
     fwdfile = outdir2 / "forward.json"
     json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
+    logger.info("Starting forward simulation.")
     Isofit(fwdfile).run()
+    logger.info("Forward simulation complete.")
 
     isofit_inv = copy.deepcopy(isofit_common)
     if inversion_mode == "simple":
@@ -238,15 +244,20 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
             reflfile_cal = f"{str(est_refl_file)}-{icalp1:02d}"
             isofit_inv["input"]["measured_radiance_file"] = radfile_cal
             isofit_inv["output"]["estimated_reflectance_file"] = reflfile_cal
+            logger.info("Applying calibration uncertainty (%d/%d)", icalp1, n_calibration_draws)
             sample_calibration_uncertainty(radfile, radfile_cal, cov_l)
             invfile = outdir2 / f"inverse-{ical:02d}.json"
             json.dump(isofit_inv, open(invfile, "w"), indent=2)
+            logger.info("Starting inversion (calibration %d/%d)", icalp1, n_calibration_draws)
             Isofit(invfile).run()
+            logger.info("Inversion complete (calibration %d/%d)", icalp1, n_calibration_draws)
 
     else:
         invfile = outdir2 / "inverse.json"
         json.dump(isofit_inv, open(invfile, "w"), indent=2)
+        logger.info("Starting inversion.")
         Isofit(invfile).run()
+        logger.info("Inversion complete.")
 
 
 def mkabs(path):

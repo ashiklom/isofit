@@ -3,8 +3,13 @@
 import sys
 import json
 import itertools
+import logging
 
 from hypertrace import do_hypertrace, mkabs
+
+# Silence spectral warnings about bands
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.getLogger("spectral").setLevel(logging.ERROR)
 
 clean = False
 if len(sys.argv) > 1:
@@ -14,7 +19,7 @@ if len(sys.argv) > 1:
 else:
     configfile = "./config.json"
 configfile = mkabs(configfile)
-print(f"Using config file `{configfile}`")
+logging.info("Using config file %s", configfile)
 
 with open(configfile) as f:
     config = json.load(f)
@@ -42,13 +47,13 @@ for key in ["lut_path", "template_file", "engine_base_dir"]:
 
 # Create iterable config permutation object
 ht_iter = itertools.product(*hypertrace_config.values())
-print("Starting Hypertrace workflow.")
+logging.info("Starting Hypertrace workflow.")
 for ht in ht_iter:
     argd = dict()
     for key, value in zip(hypertrace_config.keys(), ht):
         argd[key] = value
-    print(f"Running config: {argd}")
+    logging.info("Running config: %s", argd)
     do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   rtm_template_file, lutdir, outdir,
                   **argd)
-print("Workflow completed successfully.")
+logging.info("Workflow completed successfully!")
