@@ -20,6 +20,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   solar_zenith=0, observer_zenith=0,
                   solar_azimuth=0, observer_azimuth=0,
                   inversion_mode="inversion",
+                  calibration_uncertainty_file=None,
+                  n_calibration_draws=1,
                   create_lut=True):
     """One iteration of the hypertrace workflow.
 
@@ -206,6 +208,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
 
     fwdfile = outdir2 / "forward.json"
     json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
+    Isofit(fwdfile).run()
 
     isofit_inv = copy.deepcopy(isofit_common)
     if inversion_mode == "simple":
@@ -220,15 +223,55 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     est_refl_file = outdir2 / "estimated-reflectance"
     isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file)}
 
-    invfile = outdir2 / "inverse.json"
-    json.dump(isofit_inv, open(invfile, "w"), indent=2)
-
     # Run the workflow
-    Isofit(fwdfile).run()
-    Isofit(invfile).run()
+    if calibration_uncertainty_file is not None:
+        # Apply calibration uncertainty here
+        # calibration_uncertainty = "./hypertrace-data/other/20201006_calibration_drift.mat"
+        calmat = loadmat(calibration_uncertainty_file)
+        cov = calmat["Covariance"]
+        cov_l = np.linalg.cholesky(cov)
+        rad_img = sp.open_image(str(radfile) + ".hdr")
+        rad_m = rad_img.open_memmap()
+        for ical in range(n_calibration_draws):
+            icalp1 = ical + 1
+            radfile_cal = f"{str(radfile)}-{icalp1:02d}"
+            reflfile_cal = f"{str(est_refl_file)}-{icalp1:02d}"
+            isofit_inv["input"]["measured_radiance_file"] = radfile_cal
+            isofit_inv["output"]["estimated_reflectance_file"] = reflfile_cal
+            sample_calibration_uncertainty(radfile, radfile_cal, cov_l)
+            invfile = outdir2 / f"inverse-{ical:02d}.json"
+            json.dump(isofit_inv, open(invfile, "w"), indent=2)
+            Isofit(invfile).run()
+
+    else:
+        invfile = outdir2 / "inverse.json"
+        json.dump(isofit_inv, open(invfile, "w"), indent=2)
+        Isofit(invfile).run()
 
 
 def mkabs(path):
     """Make a path absolute."""
     path2 = pathlib.Path(path)
     return path2.expanduser().resolve()
+
+
+def sample_calibration_uncertainty(input_file: pathlib.Path,
+                                   output_file: pathlib.Path,
+                                   cov_l: np.ndarray,
+                                   bias_scale=1.0):
+    # input_file = "./zz-scratchdir/toa-radiance"
+    # output_file = "./zz-scratchdir/toa-radiance-01"
+    input_file_hdr = str(input_file) + ".hdr"
+    output_file_hdr = str(output_file) + ".hdr"
+    shutil.copy(input_file, output_file)
+    shutil.copy(input_file_hdr, output_file_hdr)
+
+    img = sp.open_image(str(output_file_hdr))
+    img_m = img.open_memmap(writable=True)
+
+    # Here, we assume that the calibration bias is constant across the entire
+    # image (i.e., the same bias is added to all pixels). We could alternatively assume
+    z = np.random.normal(size=cov_l.shape[0], scale=bias_scale)
+    Az = cov_l @ z
+    img_m += Az
+    return output_file
