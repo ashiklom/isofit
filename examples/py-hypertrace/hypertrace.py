@@ -233,7 +233,6 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     # Run the workflow
     if calibration_uncertainty_file is not None:
         # Apply calibration uncertainty here
-        # calibration_uncertainty = "./hypertrace-data/other/20201006_calibration_drift.mat"
         calmat = loadmat(calibration_uncertainty_file)
         cov = calmat["Covariance"]
         cov_l = np.linalg.cholesky(cov)
@@ -272,8 +271,6 @@ def sample_calibration_uncertainty(input_file: pathlib.Path,
                                    output_file: pathlib.Path,
                                    cov_l: np.ndarray,
                                    bias_scale=1.0):
-    # input_file = "./zz-scratchdir/toa-radiance"
-    # output_file = "./zz-scratchdir/toa-radiance-01"
     input_file_hdr = str(input_file) + ".hdr"
     output_file_hdr = str(output_file) + ".hdr"
     shutil.copy(input_file, output_file)
@@ -283,7 +280,7 @@ def sample_calibration_uncertainty(input_file: pathlib.Path,
     img_m = img.open_memmap(writable=True)
 
     # Here, we assume that the calibration bias is constant across the entire
-    # image (i.e., the same bias is added to all pixels). We could alternatively assume
+    # image (i.e., the same bias is added to all pixels).
     z = np.random.normal(size=cov_l.shape[0], scale=bias_scale)
     Az = cov_l @ z
     img_m += Az
