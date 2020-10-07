@@ -9,6 +9,7 @@ import logging
 import spectral as sp
 import numpy as np
 from scipy.io import loadmat
+from scipy.interpolate import interp1d
 
 from isofit.core.isofit import Isofit
 
@@ -236,8 +237,9 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         calmat = loadmat(calibration_uncertainty_file)
         cov = calmat["Covariance"]
         cov_l = np.linalg.cholesky(cov)
+        cov_wl = np.squeeze(calmat["wavelengths"])
         rad_img = sp.open_image(str(radfile) + ".hdr")
-        rad_m = rad_img.open_memmap()
+        rad_wl = rad_img.bands.centers
         for ical in range(n_calibration_draws):
             icalp1 = ical + 1
             radfile_cal = f"{str(radfile)}-{icalp1:02d}"
@@ -245,7 +247,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
             isofit_inv["input"]["measured_radiance_file"] = radfile_cal
             isofit_inv["output"]["estimated_reflectance_file"] = reflfile_cal
             logger.info("Applying calibration uncertainty (%d/%d)", icalp1, n_calibration_draws)
-            sample_calibration_uncertainty(radfile, radfile_cal, cov_l,
+            sample_calibration_uncertainty(radfile, radfile_cal, cov_l, cov_wl, rad_wl,
                                            bias_scale=calibration_scale)
             invfile = outdir2 / f"inverse-{ical:02d}.json"
             json.dump(isofit_inv, open(invfile, "w"), indent=2)
@@ -270,6 +272,8 @@ def mkabs(path):
 def sample_calibration_uncertainty(input_file: pathlib.Path,
                                    output_file: pathlib.Path,
                                    cov_l: np.ndarray,
+                                   cov_wl: np.ndarray,
+                                   rad_wl: np.ndarray,
                                    bias_scale=1.0):
     input_file_hdr = str(input_file) + ".hdr"
     output_file_hdr = str(output_file) + ".hdr"
@@ -283,5 +287,8 @@ def sample_calibration_uncertainty(input_file: pathlib.Path,
     # image (i.e., the same bias is added to all pixels).
     z = np.random.normal(size=cov_l.shape[0], scale=bias_scale)
     Az = cov_l @ z
-    img_m += Az
+    # Resample the added noise vector to match the wavelengths of the target
+    # image.
+    Az_resampled = interp1d(cov_wl, Az)(rad_wl)
+    img_m += Az_resampled
     return output_file
