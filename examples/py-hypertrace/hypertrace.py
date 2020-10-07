@@ -26,6 +26,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   inversion_mode="inversion",
                   calibration_uncertainty_file=None,
                   n_calibration_draws=1,
+                  calibration_scale=1,
                   create_lut=True):
     """One iteration of the hypertrace workflow.
 
@@ -245,7 +246,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
             isofit_inv["input"]["measured_radiance_file"] = radfile_cal
             isofit_inv["output"]["estimated_reflectance_file"] = reflfile_cal
             logger.info("Applying calibration uncertainty (%d/%d)", icalp1, n_calibration_draws)
-            sample_calibration_uncertainty(radfile, radfile_cal, cov_l)
+            sample_calibration_uncertainty(radfile, radfile_cal, cov_l,
+                                           bias_scale=calibration_scale)
             invfile = outdir2 / f"inverse-{ical:02d}.json"
             json.dump(isofit_inv, open(invfile, "w"), indent=2)
             logger.info("Starting inversion (calibration %d/%d)", icalp1, n_calibration_draws)
