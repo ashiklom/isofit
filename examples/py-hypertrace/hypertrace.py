@@ -5,6 +5,7 @@ import pathlib
 import json
 
 import numpy as np
+import spectral as sp
 from scipy.io import loadmat
 
 from isofit.core.isofit import Isofit
@@ -253,6 +254,13 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         if not overwrite and lbl_working_path.exists() and rdn_subs_path.exists():
             print("Skipping segmentation and extraction because files exist.")
         else:
+            print("Fixing any radiance values slightly less than zero...")
+            rad_img = sp.open_image(str(radfile) + ".hdr")
+            rad_m = rad_img.open_memmap(writable=True)
+            nearzero = np.logical_and(rad_m < 0, rad_m > -2)
+            rad_m[nearzero] = 0.0001
+            del rad_m
+            del rad_img
             print("Segmenting...")
             segment(spectra=(str(radfile), str(lbl_working_path)),
                     flag=-9999, npca=5, segsize=SEGMENTATION_SIZE, nchunk=CHUNKSIZE)
