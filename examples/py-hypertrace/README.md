@@ -10,16 +10,16 @@ In addition, you will need to have a working compiled version of the LibRadtran 
 Second, download the support datasets from here: https://github.com/ashiklom/isofit/releases/tag/hypertrace-data (~60 MB compressed, ~135 MB uncompressed).
 Extract these into the `examples/py-hypertrace/` directory (so that you have a `examples/py-hypertrace/hypertrace-data` folder).
 
-Finally, make a local copy of the `config-example.json` and modify to fit your system (most important is radiative transfer engine base directly and environment.
+Finally, make a local copy of the `configs/example-libradtran.json` and modify to fit your system (most important is radiative transfer engine base directly and environment.
 
 ``` sh
-cp config-example.json myconfig.json
+cp configs/example-libradtran.json configs/myconfig.json
 ```
 
 Then, run the `workflow.py` script with your config file as an argument:
 
 ```sh
-python workflow.py myconfig.json
+python workflow.py configs/myconfig.json
 ```
 
 Hypertrace also ships with a script to quickly calculate some basic summary statistics and diagnostics.
@@ -29,7 +29,7 @@ This script also takes the config file as an input:
 # NOTE that this also depends on pandas, so if you don't have it installed in
 # your environment, run:
 #     pip install pandas
-python summarize.py myconfig.json
+python summarize.py configs/myconfig.json
 ```
 
 Note that these statistics are (1) calculated inefficiently, and (2) are probably simpler than what is warranted by the data.
