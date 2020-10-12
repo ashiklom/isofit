@@ -130,6 +130,9 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         f"saz_{solar_azimuth}__" +\
         f"oaz_{observer_azimuth}"
     atmtag = f"aod_{aod}__h2o_{h2o}"
+    caltag = f"cal_{pathlib.Path(calibration_uncertainty_file).stem}__" +\
+        "draw_{n_calibration_draws}__" +\
+        "scale_{calibration_scale}"
 
     if create_lut:
         lutdir = mkabs(lutdir)
@@ -167,7 +170,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         vswir_conf["lut_path"] = str(lutdir2)
         vswir_conf["template_file"] = str(lrtfile)
 
-    outdir2 = outdir / lrttag / noisetag / priortag / atmtag
+    outdir2 = outdir / lrttag / noisetag / priortag / atmtag / caltag
     outdir2.mkdir(parents=True, exist_ok=True)
 
     # Observation file, which describes the geometry
