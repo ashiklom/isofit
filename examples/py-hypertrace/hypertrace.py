@@ -3,6 +3,7 @@
 import copy
 import pathlib
 import json
+import logging
 
 import numpy as np
 import spectral as sp
@@ -11,6 +12,7 @@ from scipy.io import loadmat
 from isofit.core.isofit import Isofit
 from isofit.utils import empirical_line, segment, extractions
 
+logger = logging.getLogger(__name__)
 
 def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   rtm_template_file,
@@ -218,11 +220,11 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
 
     # Run forward mode
     if not overwrite and radfile.exists():
-        print("Forward file exists. Skipping forward simulation.")
+        logger.info("Forward file exists. Skipping forward simulation.")
     else:
         fwdfile = outdir2 / "forward.json"
         json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
-        # TODO: Implement segmentation / empirical line here too?
+        logger.info("Beginning forward simulation.")
         Isofit(fwdfile).run()
 
     # Configure inverse mode
@@ -252,19 +254,19 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         isofit_inv["output"] = {"estimated_reflectance_file":  str(rfl_subs_path),
                                 "posterior_uncertainty_file": str(unc_subs_path)}
         if not overwrite and lbl_working_path.exists() and rdn_subs_path.exists():
-            print("Skipping segmentation and extraction because files exist.")
+            logger.info("Skipping segmentation and extraction because files exist.")
         else:
-            print("Fixing any radiance values slightly less than zero...")
+            logger.info("Fixing any radiance values slightly less than zero...")
             rad_img = sp.open_image(str(radfile) + ".hdr")
             rad_m = rad_img.open_memmap(writable=True)
             nearzero = np.logical_and(rad_m < 0, rad_m > -2)
             rad_m[nearzero] = 0.0001
             del rad_m
             del rad_img
-            print("Segmenting...")
+            logger.info("Segmenting...")
             segment(spectra=(str(radfile), str(lbl_working_path)),
                     flag=-9999, npca=5, segsize=SEGMENTATION_SIZE, nchunk=CHUNKSIZE)
-            print("Extracting...")
+            logger.info("Extracting...")
             extractions(inputfile=str(radfile), labels=str(lbl_working_path),
                         output=str(rdn_subs_path), chunksize=CHUNKSIZE, flag=-9999)
 
@@ -275,7 +277,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                                 "posterior_uncertainty_file": str(post_unc_path)}
 
     if not overwrite and pathlib.Path(isofit_inv["output"]["estimated_reflectance_file"]).exists():
-        print("Skipping inversion because output file exists.")
+        logger.info("Skipping inversion because output file exists.")
     else:
         invfile = outdir2 / "inverse.json"
         json.dump(isofit_inv, open(invfile, "w"), indent=2)
@@ -283,9 +285,9 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
 
     if use_empirical_line:
         if not overwrite and est_refl_file.exists():
-            print("Skipping empirical line because output exists.")
+            logger.info("Skipping empirical line because output exists.")
         else:
-            print("Applying empirical line...")
+            logger.info("Applying empirical line...")
             empirical_line(reference_radiance_file=str(rdn_subs_path),
                            reference_reflectance_file=str(rfl_subs_path),
                            reference_uncertainty_file=str(unc_subs_path),
@@ -297,7 +299,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                            output_uncertainty_file=str(post_unc_path),
                            isofit_config=str(invfile))
 
-    print("Done!")
+    logger.info("Workflow complete!")
 
 
 def mkabs(path):
