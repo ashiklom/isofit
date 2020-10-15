@@ -131,8 +131,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         f"oaz_{observer_azimuth:.2f}"
     atmtag = f"aod_{aod:.3f}__h2o_{h2o:.3f}"
     caltag = f"cal_{pathlib.Path(calibration_uncertainty_file).stem}__" +\
-        "draw_{n_calibration_draws}__" +\
-        "scale_{calibration_scale}"
+        f"draw_{n_calibration_draws}__" +\
+        f"scale_{calibration_scale}"
 
     if create_lut:
         lutdir = mkabs(lutdir)
@@ -292,6 +292,6 @@ def sample_calibration_uncertainty(input_file: pathlib.Path,
     Az = 1.0 + cov_l @ z
     # Resample the added noise vector to match the wavelengths of the target
     # image.
-    Az_resampled = interp1d(cov_wl, Az)(rad_wl)
+    Az_resampled = interp1d(cov_wl, Az, fill_value="extrapolate")(rad_wl)
     img_m *= Az_resampled
     return output_file
