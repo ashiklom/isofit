@@ -28,7 +28,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   calibration_uncertainty_file=None,
                   n_calibration_draws=1,
                   calibration_scale=1,
-                  create_lut=True):
+                  create_lut=True,
+                  overwrite=False):
     """One iteration of the hypertrace workflow.
 
     Required arguments:
@@ -215,11 +216,14 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     fwd_state["AOT550"]["init"] = aod
     fwd_state["H2OSTR"]["init"] = h2o
 
-    fwdfile = outdir2 / "forward.json"
-    json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
-    logger.info("Starting forward simulation.")
-    Isofit(fwdfile).run()
-    logger.info("Forward simulation complete.")
+    if radfile.exists() and not overwrite:
+        logger.info("Skipping forward simulation because file exists.")
+    else:
+        fwdfile = outdir2 / "forward.json"
+        json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
+        logger.info("Starting forward simulation.")
+        Isofit(fwdfile).run()
+        logger.info("Forward simulation complete.")
 
     isofit_inv = copy.deepcopy(isofit_common)
     if inversion_mode == "simple":
@@ -243,27 +247,35 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         cov_wl = np.squeeze(calmat["wavelengths"])
         rad_img = sp.open_image(str(radfile) + ".hdr")
         rad_wl = rad_img.bands.centers
+        del rad_img
         for ical in range(n_calibration_draws):
             icalp1 = ical + 1
             radfile_cal = f"{str(radfile)}-{icalp1:02d}"
             reflfile_cal = f"{str(est_refl_file)}-{icalp1:02d}"
-            isofit_inv["input"]["measured_radiance_file"] = radfile_cal
-            isofit_inv["output"]["estimated_reflectance_file"] = reflfile_cal
-            logger.info("Applying calibration uncertainty (%d/%d)", icalp1, n_calibration_draws)
-            sample_calibration_uncertainty(radfile, radfile_cal, cov_l, cov_wl, rad_wl,
-                                           bias_scale=calibration_scale)
-            invfile = outdir2 / f"inverse-{ical:02d}.json"
-            json.dump(isofit_inv, open(invfile, "w"), indent=2)
-            logger.info("Starting inversion (calibration %d/%d)", icalp1, n_calibration_draws)
-            Isofit(invfile).run()
-            logger.info("Inversion complete (calibration %d/%d)", icalp1, n_calibration_draws)
+            if pathlib.Path(reflfile_cal).exists() and not overwrite:
+                logger.info("Skipping calibration %d/%d because output exists",
+                            icalp1, n_calibration_draws)
+            else:
+                isofit_inv["input"]["measured_radiance_file"] = radfile_cal
+                isofit_inv["output"]["estimated_reflectance_file"] = reflfile_cal
+                logger.info("Applying calibration uncertainty (%d/%d)", icalp1, n_calibration_draws)
+                sample_calibration_uncertainty(radfile, radfile_cal, cov_l, cov_wl, rad_wl,
+                                            bias_scale=calibration_scale)
+                invfile = outdir2 / f"inverse-{ical:02d}.json"
+                json.dump(isofit_inv, open(invfile, "w"), indent=2)
+                logger.info("Starting inversion (calibration %d/%d)", icalp1, n_calibration_draws)
+                Isofit(invfile).run()
+                logger.info("Inversion complete (calibration %d/%d)", icalp1, n_calibration_draws)
 
     else:
-        invfile = outdir2 / "inverse.json"
-        json.dump(isofit_inv, open(invfile, "w"), indent=2)
-        logger.info("Starting inversion.")
-        Isofit(invfile).run()
-        logger.info("Inversion complete.")
+        if est_refl_file.exists() and not overwrite:
+            logger.info("Skipping inversion because output exists.")
+        else:
+            invfile = outdir2 / "inverse.json"
+            json.dump(isofit_inv, open(invfile, "w"), indent=2)
+            logger.info("Starting inversion.")
+            Isofit(invfile).run()
+            logger.info("Inversion complete.")
 
 
 def mkabs(path):
