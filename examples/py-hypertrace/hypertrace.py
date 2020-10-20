@@ -236,7 +236,13 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     isofit_inv["implementation"]["mode"] = inversion_mode
     isofit_inv["input"]["measured_radiance_file"] = str(radfile)
     est_refl_file = outdir2 / "estimated-reflectance"
-    isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file)}
+    est_state_file = outdir2 / "estimated-state"
+    atm_coef_file = outdir2 / "atmospheric-coefficients"
+    post_unc_file = outdir2 / "posterior-uncertainty"
+    isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file),
+                            "estimated_state_file": str(est_state_file),
+                            "atmospheric_coefficients_file": str(atm_coef_file),
+                            "posterior_uncetainty_file": str(post_unc_file)}
 
     # Run the workflow
     if calibration_uncertainty_file is not None:
@@ -252,16 +258,22 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
             icalp1 = ical + 1
             radfile_cal = f"{str(radfile)}-{icalp1:02d}"
             reflfile_cal = f"{str(est_refl_file)}-{icalp1:02d}"
+            statefile_cal = f"{str(est_state_file)}-{icalp1:02d}"
+            atmfile_cal = f"{str(atm_coef_file)}-{icalp1:02d}"
+            uncfile_cal = f"{str(post_unc_file)}-{icalp1:02d}"
             if pathlib.Path(reflfile_cal).exists() and not overwrite:
                 logger.info("Skipping calibration %d/%d because output exists",
                             icalp1, n_calibration_draws)
             else:
                 isofit_inv["input"]["measured_radiance_file"] = radfile_cal
                 isofit_inv["output"]["estimated_reflectance_file"] = reflfile_cal
+                isofit_inv["output"]["estimated_state_file"] = statefile_cal
+                isofit_inv["output"]["atmospheric_coefficients_file"] = atmfile_cal
+                isofit_inv["output"]["posterior_uncertainty_file"] = uncfile_cal
                 logger.info("Applying calibration uncertainty (%d/%d)", icalp1, n_calibration_draws)
                 sample_calibration_uncertainty(radfile, radfile_cal, cov_l, cov_wl, rad_wl,
-                                            bias_scale=calibration_scale)
-                invfile = outdir2 / f"inverse-{ical:02d}.json"
+                                               bias_scale=calibration_scale)
+                invfile = outdir2 / f"inverse-{icalp1:02d}.json"
                 json.dump(isofit_inv, open(invfile, "w"), indent=2)
                 logger.info("Starting inversion (calibration %d/%d)", icalp1, n_calibration_draws)
                 Isofit(invfile).run()
