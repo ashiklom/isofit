@@ -131,9 +131,12 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         f"saz_{solar_azimuth:.2f}__" +\
         f"oaz_{observer_azimuth:.2f}"
     atmtag = f"aod_{aod:.3f}__h2o_{h2o:.3f}"
-    caltag = f"cal_{pathlib.Path(calibration_uncertainty_file).stem}__" +\
-        f"draw_{n_calibration_draws}__" +\
-        f"scale_{calibration_scale}"
+    if calibration_uncertainty_file is not None:
+        caltag = f"cal_{pathlib.Path(calibration_uncertainty_file).stem}__" +\
+                f"draw_{n_calibration_draws}__" +\
+                f"scale_{calibration_scale}"
+    else:
+        caltag = "cal_NONE__draw_0__scale_0"
 
     if create_lut:
         lutdir = mkabs(lutdir)
@@ -242,7 +245,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file),
                             "estimated_state_file": str(est_state_file),
                             "atmospheric_coefficients_file": str(atm_coef_file),
-                            "posterior_uncetainty_file": str(post_unc_file)}
+                            "posterior_uncertainty_file": str(post_unc_file)}
 
     # Run the workflow
     if calibration_uncertainty_file is not None:
