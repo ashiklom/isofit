@@ -22,33 +22,45 @@ import numpy as np
 import scipy
 from sklearn.cluster import KMeans
 from spectral.io import envi
+import os
 
 from isofit.core.common import expand_path, json_load_ascii
 
 
-def surface_model(config_file: str) -> None:
+def surface_model(config_path: str, wavelength_path: str = None, 
+        output_path: str = None) -> None:
     """The surface model tool contains everything you need to build basic
     multicomponent (i.e. colleciton of Gaussian) surface priors for the
     multicomponent surface model.
 
     Args:
-        config_file: path to a JSON formatted surface model configuration
+        config_path: path to a JSON formatted surface model configuration
+        wavelength_path: optional path to a three-column wavelength file, 
+           overriding the configuration file settings
+        output_path: optional path to the destination .mat file, overriding
+           the configuration file settings
     Returns:
         None
     """
 
     # Load configuration JSON into a local dictionary
-    configdir, _ = os.path.split(os.path.abspath(config_file))
-    config = json_load_ascii(config_file, shell_replace=True)
+    configdir, _ = os.path.split(os.path.abspath(config_path))
+    config = json_load_ascii(config_path, shell_replace=True)
 
     # Determine top level parameters
     for q in ['output_model_file', 'sources', 'normalize', 'wavelength_file']:
         if q not in config:
             raise ValueError("Missing parameter: %s" % q)
-    wavelength_file = expand_path(configdir, config['wavelength_file'])
+    if wavelength_path is not None:
+        wavelength_file = wavelength_path
+    else:
+        wavelength_file = expand_path(configdir, config['wavelength_file'])
+    if output_path is not None:
+        outfile = output_path
+    else:
+        outfile = expand_path(configdir, config['output_model_file'])
     normalize = config['normalize']
     reference_windows = config['reference_windows']
-    outfile = expand_path(configdir, config['output_model_file'])
 
     # load wavelengths file, and change units to nm if needed
     q = np.loadtxt(wavelength_file)
@@ -129,11 +141,8 @@ def surface_model(config_file: str) -> None:
                 swl = swl * 1000.0
 
             # Load library and adjust interleave, if needed
-            rfl_mm = rfl.open_memmap(interleave='source', writable=False)
-            if rfl.metadata['interleave'] == 'bip':
-                x = np.array(rfl_mm[:, :, :])
-            if rfl.metadata['interleave'] == 'bil':
-                x = np.array(rfl_mm[:, :, :]).transpose((0, 2, 1))
+            rfl_mm = rfl.open_memmap(interleave='bip', writable=False)
+            x = np.array(rfl_mm[:, :, :])
             x = x.reshape(nl * ns, nb)
 
             # import spectra and resample
@@ -151,11 +160,8 @@ def surface_model(config_file: str) -> None:
                           for n in ('lines', 'bands', 'samples')]
 
                 # Load library and adjust interleave, if needed
-                attr_mm = attr.open_memmap(interleave='source', writable=False)
-                if attr.metadata['interleave'] == 'bip':
-                    x = np.array(attr_mm[:, :, :])
-                if attr.metadata['interleave'] == 'bil':
-                    x = np.array(attr_mm[:, :, :]).transpose((0, 2, 1))
+                attr_mm = attr.open_memmap(interleave='bip', writable=False)
+                x = np.array(attr_mm[:, :, :])
                 x = x.reshape(nla * nsa, nba)
                 model['attributes'] = attr.metadata['band names']
 
