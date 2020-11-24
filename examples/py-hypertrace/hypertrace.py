@@ -5,11 +5,13 @@
 import copy
 import pathlib
 import json
+import shutil
 import logging
 
 import numpy as np
 import spectral as sp
 from scipy.io import loadmat
+from scipy.interpolate import interp1d
 
 from isofit.core.isofit import Isofit
 from isofit.utils import empirical_line, segment, extractions
@@ -27,6 +29,9 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   solar_azimuth=0, observer_azimuth=0,
                   inversion_mode="inversion",
                   use_empirical_line=False,
+                  calibration_uncertainty_file=None,
+                  n_calibration_draws=1,
+                  calibration_scale=1,
                   create_lut=True,
                   overwrite=False):
     """One iteration of the hypertrace workflow.
@@ -138,6 +143,12 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         f"saz_{solar_azimuth:.2f}__" +\
         f"oaz_{observer_azimuth:.2f}"
     atmtag = f"aod_{aod:.3f}__h2o_{h2o:.3f}"
+    if calibration_uncertainty_file is not None:
+        caltag = f"cal_{pathlib.Path(calibration_uncertainty_file).stem}__" +\
+                f"draw_{n_calibration_draws}__" +\
+                f"scale_{calibration_scale}"
+    else:
+        caltag = "cal_NONE__draw_0__scale_0"
 
     if create_lut:
         lutdir = mkabs(lutdir)
@@ -178,7 +189,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         vswir_conf["lut_path"] = str(lutdir2)
         vswir_conf["template_file"] = str(lrtfile)
 
-    outdir2 = outdir / lrttag / noisetag / priortag / atmtag
+    outdir2 = outdir / lrttag / noisetag / priortag / atmtag / caltag
     outdir2.mkdir(parents=True, exist_ok=True)
 
     # Observation file, which describes the geometry
@@ -224,16 +235,15 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     fwd_state["AOT550"]["init"] = aod
     fwd_state["H2OSTR"]["init"] = h2o
 
-    # Run forward mode
-    if not overwrite and radfile.exists():
-        logger.info("Forward file exists. Skipping forward simulation.")
+    if radfile.exists() and not overwrite:
+        logger.info("Skipping forward simulation because file exists.")
     else:
         fwdfile = outdir2 / "forward.json"
         json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
-        logger.info("Beginning forward simulation.")
+        logger.info("Starting forward simulation.")
         Isofit(fwdfile).run()
+        logger.info("Forward simulation complete.")
 
-    # Configure inverse mode
     isofit_inv = copy.deepcopy(isofit_common)
     if inversion_mode == "simple":
         # Special case! Use the optimal estimation code, but set `max_nfev` to 1.
@@ -245,20 +255,90 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     isofit_inv["implementation"]["mode"] = inversion_mode
     isofit_inv["input"]["measured_radiance_file"] = str(radfile)
     est_refl_file = outdir2 / "estimated-reflectance"
+
     post_unc_path = outdir2 / "posterior-uncertainty"
 
     # Inverse mode
+    est_state_file = outdir2 / "estimated-state"
+    atm_coef_file = outdir2 / "atmospheric-coefficients"
+    post_unc_file = outdir2 / "posterior-uncertainty"
+    isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file),
+                            "estimated_state_file": str(est_state_file),
+                            "atmospheric_coefficients_file": str(atm_coef_file),
+                            "posterior_uncertainty_file": str(post_unc_file)}
+
+    # Run the workflow
+    if calibration_uncertainty_file is not None:
+        # Apply calibration uncertainty here
+        calmat = loadmat(calibration_uncertainty_file)
+        cov = calmat["Covariance"]
+        cov_l = np.linalg.cholesky(cov)
+        cov_wl = np.squeeze(calmat["wavelengths"])
+        rad_img = sp.open_image(str(radfile) + ".hdr")
+        rad_wl = rad_img.bands.centers
+        del rad_img
+        for ical in range(n_calibration_draws):
+            icalp1 = ical + 1
+            radfile_cal = f"{str(radfile)}-{icalp1:02d}"
+            reflfile_cal = f"{str(est_refl_file)}-{icalp1:02d}"
+            statefile_cal = f"{str(est_state_file)}-{icalp1:02d}"
+            atmfile_cal = f"{str(atm_coef_file)}-{icalp1:02d}"
+            uncfile_cal = f"{str(post_unc_file)}-{icalp1:02d}"
+            if pathlib.Path(reflfile_cal).exists() and not overwrite:
+                logger.info("Skipping calibration %d/%d because output exists",
+                            icalp1, n_calibration_draws)
+                next
+            logger.info("Applying calibration uncertainty (%d/%d)", icalp1, n_calibration_draws)
+            sample_calibration_uncertainty(radfile, radfile_cal, cov_l, cov_wl, rad_wl,
+                                           bias_scale=calibration_scale)
+            logger.info("Starting inversion (calibration %d/%d)", icalp1, n_calibration_draws)
+            do_inverse(
+                copy.deepcopy(isofit_inv), radfile_cal, reflfile_cal,
+                statefile_cal, atmfile_cal, uncfile_cal,
+                overwrite=overwrite, use_empirical_line=use_empirical_line
+            )
+            logger.info("Inversion complete (calibration %d/%d)", icalp1, n_calibration_draws)
+
+    else:
+        if est_refl_file.exists() and not overwrite:
+            logger.info("Skipping inversion because output exists.")
+        else:
+            logger.info("Starting inversion.")
+            do_inverse(
+                copy.deepcopy(isofit_inv), radfile, est_refl_file,
+                est_state_file, atm_coef_file, post_unc_file,
+                overwrite=overwrite, use_empirical_line=use_empirical_line
+            )
+            logger.info("Inversion complete.")
+    logger.info("Workflow complete!")
+
+
+##################################################
+def do_inverse(isofit_inv: dict,
+               radfile: pathlib.Path,
+               est_refl_file: pathlib.Path,
+               est_state_file: pathlib.Path,
+               atm_coef_file: pathlib.Path,
+               post_unc_file: pathlib.Path,
+               overwrite: bool,
+               use_empirical_line: bool):
     if use_empirical_line:
         # Segment first, then run on segmented file
         SEGMENTATION_SIZE = 40
         CHUNKSIZE = 256
-        lbl_working_path = radfile.parent / "segmentation-file"
-        rdn_subs_path = radfile.with_name("toa-radiance-subs")
-        rfl_subs_path = est_refl_file.with_name("estimated-reflectance-subs")
-        unc_subs_path = post_unc_path.with_name("posterior-uncertainty-subs")
+        lbl_working_path = radfile.parent / str(radfile).replace("toa-radiance", "segmentation")
+        rdn_subs_path = radfile.with_suffix("-subs")
+        rfl_subs_path = est_refl_file.with_suffix("-subs")
+        state_subs_path = est_state_file.with_suffix("-subs")
+        atm_subs_path = atm_coef_file.with_suffix("-subs")
+        unc_subs_path = post_unc_file.with_suffix("-subs")
         isofit_inv["input"]["measured_radiance_file"] = str(rdn_subs_path)
-        isofit_inv["output"] = {"estimated_reflectance_file":  str(rfl_subs_path),
-                                "posterior_uncertainty_file": str(unc_subs_path)}
+        isofit_inv["output"] = {
+            "estimated_reflectance_file":  str(rfl_subs_path),
+            "estimated_state_file":  str(state_subs_path),
+            "atmospheric_coefficients_file":  str(atm_subs_path),
+            "posterior_uncertainty_file": str(unc_subs_path)
+        }
         if not overwrite and lbl_working_path.exists() and rdn_subs_path.exists():
             logger.info("Skipping segmentation and extraction because files exist.")
         else:
@@ -279,13 +359,17 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     else:
         # Run Isofit directly
         isofit_inv["input"]["measured_radiance_file"] = str(radfile)
-        isofit_inv["output"] = {"estimated_reflectance_file": str(est_refl_file),
-                                "posterior_uncertainty_file": str(post_unc_path)}
+        isofit_inv["output"] = {
+            "estimated_reflectance_file": str(est_refl_file),
+            "estimated_state_file": str(est_state_file),
+            "atmospheric_coefficients_file": str(atm_coef_file),
+            "posterior_uncertainty_file": str(post_unc_file)
+        }
 
     if not overwrite and pathlib.Path(isofit_inv["output"]["estimated_reflectance_file"]).exists():
         logger.info("Skipping inversion because output file exists.")
     else:
-        invfile = outdir2 / "inverse.json"
+        invfile = radfile.parent / (str(radfile).replace("toa-radiance", "inverse") + ".json")
         json.dump(isofit_inv, open(invfile, "w"), indent=2)
         Isofit(invfile).run()
 
@@ -302,13 +386,35 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                            input_radiance_file=str(radfile),
                            input_locations_file=None,
                            output_reflectance_file=str(est_refl_file),
-                           output_uncertainty_file=str(post_unc_path),
+                           output_uncertainty_file=str(post_unc_file),
                            isofit_config=str(invfile))
-
-    logger.info("Workflow complete!")
-
 
 def mkabs(path):
     """Make a path absolute."""
     path2 = pathlib.Path(path)
     return path2.expanduser().resolve()
+
+
+def sample_calibration_uncertainty(input_file: pathlib.Path,
+                                   output_file: pathlib.Path,
+                                   cov_l: np.ndarray,
+                                   cov_wl: np.ndarray,
+                                   rad_wl: np.ndarray,
+                                   bias_scale=1.0):
+    input_file_hdr = str(input_file) + ".hdr"
+    output_file_hdr = str(output_file) + ".hdr"
+    shutil.copy(input_file, output_file)
+    shutil.copy(input_file_hdr, output_file_hdr)
+
+    img = sp.open_image(str(output_file_hdr))
+    img_m = img.open_memmap(writable=True)
+
+    # Here, we assume that the calibration bias is constant across the entire
+    # image (i.e., the same bias is added to all pixels).
+    z = np.random.normal(size=cov_l.shape[0], scale=bias_scale)
+    Az = 1.0 + cov_l @ z
+    # Resample the added noise vector to match the wavelengths of the target
+    # image.
+    Az_resampled = interp1d(cov_wl, Az, fill_value="extrapolate")(rad_wl)
+    img_m *= Az_resampled
+    return output_file

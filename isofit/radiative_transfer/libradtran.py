@@ -210,15 +210,10 @@ class LibRadTranRT(TabularRT):
         # so the equation reduces to 0 / 0. Therefore, we assume that spherical
         # albedo here is zero. Any other non-finite results are (currently)
         # unexpected, so we convert them to errors.
-        bad = np.logical_and(rho025 == rhoatm, rho05 == rhoatm)
-        sphalb = 2.8*(2.0*rho025-rhoatm-rho05)/(rho025-rho05)
-        if np.sum(bad) > 0:
-            logging.debug('Setting sphalb = 0 where rho025 == rho05 == rhoatm.')
-            sphalb[bad] = 0
-
-        if not np.all(np.isfinite(sphalb)):
-            raise AttributeError('Non-finite values in spherical albedo calculation')
-
+        drho = rho025 - rho05
+        good = drho > 0
+        sphalb = np.zeros_like(irr)
+        sphalb[good] = 2.8*(2.0*rho025[good]-rhoatm[good]-rho05[good]) / drho[good]
         transm = (rho05-rhoatm)*(2.0-sphalb)
 
         # For now, don't estimate this term!!

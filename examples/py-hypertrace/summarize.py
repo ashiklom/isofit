@@ -37,6 +37,7 @@ def parse_dir(ddir):
         pat = f".*{key}_(.+?)" + r"(__|/|\Z)"
         match = re.match(pat, str(ddir))
         if match is not None:
+
             match = match.group(1)
         grps[key] = [match]
     for key in ["szen", "ozen", "saz", "oaz", "snr", "aod", "h2o"]:
