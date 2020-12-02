@@ -170,21 +170,28 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                 ))
             open(lutdir2 / "prescribed_geom", "w").write(f"99:99:99   {solar_zenith}  {solar_azimuth}")
 
-        elif atmospheric_rtm == "modtran":
-            lrtfile = lutdir2 / "modtran-template.json"
-            with open(rtm_template_file, "r") as f:
-                fdict = json.load(f)
-            mod = fdict["MODTRAN"][0]["MODTRANINPUT"]
-            for key in ['MODEL', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6']:
-                mod['ATMOSPHERE'][key] = lrt_atmosphere_type
-            assert mod["GEOMETRY"]["IPARM"] == 12, \
-                "MODTRAN GEOMETRY IPARM must be set to 12, " +\
-                f"but is currently set to {mod['GEOMETRY']['IPARM']}"
-            mod["GEOMETRY"]["PARM1"] = 180 - solar_azimuth
-            mod["GEOMETRY"]["PARM2"] = solar_zenith
-            # TODO: Is this angle correct?
-            mod["GEOMETRY"]["OBSZEN"] = observer_zenith
-            json.dump(fdict, open(lrtfile, "w"), indent=2)
+        elif atmospheric_rtm in ("modtran", "simulated_modtran"):
+            lrtfile = lutdir2 / "modtran-template-h2o.json"
+            mt_params = {
+                "atmosphere_type":lrt_atmosphere_type,
+                "fid": "hypertrace",
+                "altitude_km": -99.9,# TODO: Hard coded to max altitude; make settable
+                "dayofyear": 200,    # TODO: Make settable; currently, July 20
+                "latitude": 45,      # TODO: Make settable
+                "longitude": -85,    # TODO: Make settable
+                "to_sensor_azimuth": observer_azimuth,
+                "to_sensor_zenith": 180 - observer_zenith,
+                "gmtime": 10.5,       # TODO: Make settable
+                "elevation_km": 0.01,   # TODO: Make settable
+                "output_file": lrtfile,
+                "ihaze_type": "AER_NONE"
+            }
+            write_modtran_template(**mt_params)
+            mt_params["ihaze_type"] = "AER_RURAL"
+            mt_params["output_file"] = lutdir2 / "modtran-template.json"
+            write_modtran_template(**mt_params)
+
+            vswir_conf["modtran_template_path"] = str(mt_params["output_file"])
 
         vswir_conf["lut_path"] = str(lutdir2)
         vswir_conf["template_file"] = str(lrtfile)
