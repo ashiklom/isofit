@@ -54,8 +54,14 @@ Top level settings are as follows:
     - `lrt_atmosphere_type` -- LibRadtran atmosphere type. See LibRadtran manual for details. Default = `midlatitude_winter`
     - `atm_aod_h2o` -- A list containing three elements: The atmosphere type, AOD, and H2O. This provides a way to iterate over specific known atmospheres that are combinations of the three previous variables. If this is set, it overrides the three previous arguments. Default = `None`
         - For example, `"atm_aod_h2o": [["midlatitude_winter", 0.1, 2.0], ["midlatitude_summer", 0.08, 1.5]]` means to iterate over _two_ atmospheres. On the other hand, a config like `"atm": ["midlatitude_winter", "midlatitude_summer"], "aod": [0.1, 0.08], "h2o": [2.0, 1.5]` would run 2 x 2 x 2 = 8 atmospheres -- one for each combination of these three fields.
-    - `solar_zenith`, `observer_zenith` -- Solar and observer zenith angles, respectively (0 = directly overhead, 90 = horizon). These are in degrees off nadir. Default = 0 for both. (Note that using LibRadtran to generate look up tables for off-nadir angles is ~10x slower than at nadir; however, this step only affects the LUT generation, so it shouldn't introduce additional delay if these LUTs already exist).
-    - `solar_azimuth`, `observer_azimuth` -- Solar and observer azimuth angles, respectively, in degrees. Observer azimuth is the sensor _position_ (so 180 degrees off from view direction) relative to N, rotating counterclockwise; i.e., 0 = Sensor in N, looking S; 90 = Sensor in W, looking E (this follows the LibRadtran convention). Default = 0 for both.
+    - `solar_zenith`, `observer_zenith` -- Solar and observer zenith angles, respectively (0 = directly overhead, 90 = horizon). These are in degrees off nadir. Default = 0 for both. (Note that using LibRadtran to generate look up tables for off-nadir angles is ~10x slower than at nadir; however, this step only affects the LUT generation, so it shouldn't introduce additional delay if these LUTs already exist). (Note: For `modtran` and `modtran_simulator`, `solar_zenith` is calculated from the `gmtime` and location, so this parameter is ignored.)
+    - `solar_azimuth`, `observer_azimuth` -- Solar and observer azimuth angles, respectively, in degrees. Observer azimuth is the sensor _position_ (so 180 degrees off from view direction) relative to N, rotating counterclockwise; i.e., 0 = Sensor in N, looking S; 90 = Sensor in W, looking E (this follows the LibRadtran convention). Default = 0 for both. Note: For `modtran` and `modtran_simulator`, `observer_azimuth` is used as `to_sensor_azimuth`; i.e., the *relative* azimuth of the sensor. The true solar azimuth is calculated from lat/lon and time, so `solar_azimuth` is ignored.
+    - The following parameters are currently only supported for `modtran` and `modtran_simulator`:
+        - `observer_altitude_km` -- Sensor altitude in km. Must be less than 100. Default = 99.9.
+        - `dayofyear` -- Julian date of observation. Default = 200
+        - `latitude, longitude` -- Decimal degree coordinates of observation. Default = 34.15, -118.14 (Pasadena, CA).
+        - `localtime` -- Local time, in decimal hours (0-24). Default = 10.0
+        - `elevation_km` -- Target elevation above sea level, in km. Default = 0.01
     - `inversion_mode` -- One of three options:
         - `"inversion"` (default) -- Standard optimal estimation algorithm in Isofit.
         - `"mcmc_inversion"` -- MCMC inversion using Metropolis-Hastings algorithm. Note that this probably takes significantly longer than the default.
@@ -63,10 +69,24 @@ Top level settings are as follows:
         - `"simple"` -- Algebraic inversion. This uses the same underlying code as `"inversion"`, but for the least-squares optimization step, sets the number of function evaluations to 1. This works because Isofit uses the algebraic inversion as its initial condition.
     - `create_lut` -- If `true` (default), use LibRadtran to create look-up tables as necessary. If `false`, use whatever LUT configuration (path, engine, etc.) you provided in the Isofit config (note that this is untested and experimental).
     
+### Modtran simulator
+
+To generate your own atmospheric look-up tables, we recommend using the MODTRAN simulator (sRTMnet).
+This requires a working copy of the [6S (v2.1) atmospheric radiative transfer model](http://6s.ltdri.org/pages/downloads.html) as well as the [pre-compiled MODTRAN emulator](https://doi.org/10.5281/zenodo.4096627).
+Briefly, the steps to get this working are:
+
+1. [Download the 6S source code](http://6s.ltdri.org/pages/downloads.html) and extract to a directory on your local machine.
+2. Compile 6S by calling `make` inside the source code directory. The binary will be installed in that directory.
+   - NOTE: If you have `gfortran/gcc` > v8.0, you may need to add `-std=legacy` to the `FFLAGS` in the Makefile to prevent errors during compilation.
+3. [Download the pre-compiled MODTRAN emulator](https://doi.org/10.5281/zenodo.4096627) and extract to a directory.
+4. When running Hypertrace, in the `isofit/forward_model/radiative_transfer_engines/vswir` block, set `engine_base_dir` to the absolute path of the _directory_ where you extracted the 6S source code, the `emulator_aux_file` to the absolute path of the `sRTMnet_v100_aux.npz` file, and `emulator_file` to the path to the sRTMnet _directory_ that contains `saved_model.pb`, `assets`, and `variables` (usually, a subdirectory called `sRTMnet_v100` in the same directory as the `.npz` file).
+
+    
 ### Libradtran
 
-To generate your own atmospheric look-up tables, you'll need a working installation of LibRadTran.
-Follow the instructions in the [Isofit `README`](https://github.com/ashiklom/isofit/tree/r-geom-2#quick-start-with-libradtran-20x) to install.
+Alternatively, you can generate LUTs using the open source atmospheric RTM LibRadtran.
+To do this, you'll need a working installation of LibRadTran.
+Follow the instructions in the [Isofit `README`](https://github.com/isofit/isofit#quick-start-with-libradtran-20x) to install.
 Note that you must install LibRadTran into the source code directory for it to work properly; i.e.
 
 ``` sh
