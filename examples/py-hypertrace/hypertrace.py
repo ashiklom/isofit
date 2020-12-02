@@ -15,6 +15,7 @@ from scipy.interpolate import interp1d
 
 from isofit.core.isofit import Isofit
 from isofit.utils import empirical_line, segment, extractions
+from isofit.utils.apply_oe import write_modtran_template
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,15 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   lutdir, outdir,
                   surface_file="./data/prior.mat",
                   noisefile=None, snr=300,
-                  aod=0.1, h2o=1.0, lrt_atmosphere_type="midlatitude_winter",
+                  aod=0.1, h2o=1.0, lrt_atmosphere_type="ATM_MIDLAT_WINTER",
                   atm_aod_h2o=None,
                   solar_zenith=0, observer_zenith=0,
                   solar_azimuth=0, observer_azimuth=0,
+                  observer_altitude_km=99.9,
+                  dayofyear=200,
+                  latitude=34.15, longitude=-118.14,
+                  localtime=10.0,
+                  elevation_km=0.01,
                   inversion_mode="inversion",
                   use_empirical_line=False,
                   calibration_uncertainty_file=None,
@@ -75,7 +81,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
       h2o: True water vapor content. Default = 1.0
 
       lrt_atmosphere_type: LibRadtran or Modtran atmosphere type. See RTM
-      manuals for details. Default = `midlatitude_winter`
+      manuals for details. Default = `ATM_MIDLAT_WINTER`
 
       atm_aod_h2o: A list containing three elements: The atmosphere type, AOD,
       and H2O. This provides a way to iterate over specific known atmospheres
@@ -86,13 +92,33 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
       respectively (0 = directly overhead, 90 = horizon). These are in degrees
       off nadir. Default = 0 for both. (Note that off-nadir angles make
       LibRadtran run _much_ more slowly, so be prepared if you need to generate
-      those LUTs).
+      those LUTs). (Note: For `modtran` and `modtran_simulator`, `solar_zenith`
+      is calculated from the `gmtime` and location, so this parameter is ignored.)
 
       solar_azimuth, observer_azimuth: Solar and observer azimuth angles,
       respectively, in degrees. Observer azimuth is the sensor _position_ (so
       180 degrees off from view direction) relative to N, rotating
       counterclockwise; i.e., 0 = Sensor in N, looking S; 90 = Sensor in W,
       looking E (this follows the LibRadtran convention). Default = 0 for both.
+      Note: For `modtran` and `modtran_simulator`, `observer_azimuth` is used as
+      `to_sensor_azimuth`; i.e., the *relative* azimuth of the sensor. The true
+      solar azimuth is calculated from lat/lon and time, so `solar_azimuth` is ignored.
+
+      observer_altitude_km: Sensor altitude in km. Must be less than 100. Default = 99.9.
+      (`modtran` and `modtran_simulator` only)
+
+      dayofyear: Julian date of observation. Default = 200
+      (`modtran` and `modtran_simulator` only)
+
+      latitude, longitude: Decimal degree coordinates of observation. Default =
+      34.15, -118.14 (Pasadena, CA).
+      (`modtran` and `modtran_simulator` only)
+
+      localtime: Local time, in decimal hours (0-24). Default = 10.0
+      (`modtran` and `modtran_simulator` only)
+
+      elevation_km: Target elevation above sea level, in km. Default = 0.01
+      (`modtran` and `modtran_simulator` only)
 
       inversion_mode: Inversion algorithm to use. Must be either "inversion"
       (default) for standard optimal estimation, or "mcmc_inversion" for MCMC.
@@ -108,6 +134,8 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
 
     outdir = mkabs(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
+
+    assert observer_altitude_km < 100, "Isofit 6S does not support altitude >= 100km"
 
     isofit_common = copy.deepcopy(isofit_config)
     # NOTE: All of these settings are *not* copied, but referenced. So these
@@ -173,16 +201,16 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         elif atmospheric_rtm in ("modtran", "simulated_modtran"):
             lrtfile = lutdir2 / "modtran-template-h2o.json"
             mt_params = {
-                "atmosphere_type":lrt_atmosphere_type,
+                "atmosphere_type": lrt_atmosphere_type,
                 "fid": "hypertrace",
-                "altitude_km": -99.9,# TODO: Hard coded to max altitude; make settable
-                "dayofyear": 200,    # TODO: Make settable; currently, July 20
-                "latitude": 45,      # TODO: Make settable
-                "longitude": -85,    # TODO: Make settable
+                "altitude_km": observer_altitude_km,
+                "dayofyear": dayofyear,
+                "latitude": latitude,
+                "longitude": longitude,
                 "to_sensor_azimuth": observer_azimuth,
                 "to_sensor_zenith": 180 - observer_zenith,
-                "gmtime": 10.5,       # TODO: Make settable
-                "elevation_km": 0.01,   # TODO: Make settable
+                "gmtime": localtime,
+                "elevation_km": elevation_km,
                 "output_file": lrtfile,
                 "ihaze_type": "AER_NONE"
             }
@@ -192,6 +220,11 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
             write_modtran_template(**mt_params)
 
             vswir_conf["modtran_template_path"] = str(mt_params["output_file"])
+            if atmospheric_rtm == "simulated_modtran":
+                vswir_conf["interpolator_base_path"] = str(lutdir2 / "sRTMnet_interpolator")
+
+        else:
+            raise ValueError(f"Invalid atmospheric rtm {atmospheric_rtm}")
 
         vswir_conf["lut_path"] = str(lutdir2)
         vswir_conf["template_file"] = str(lrtfile)
