@@ -165,11 +165,6 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         aod = atm_aod_h2o[1]
         h2o = atm_aod_h2o[2]
 
-    lrttag = f"atm_{lrt_atmosphere_type}__" +\
-        f"szen_{solar_zenith:.2f}__" +\
-        f"ozen_{observer_zenith:.2f}__" +\
-        f"saz_{solar_azimuth:.2f}__" +\
-        f"oaz_{observer_azimuth:.2f}"
     atmtag = f"aod_{aod:.3f}__h2o_{h2o:.3f}"
     if calibration_uncertainty_file is not None:
         caltag = f"cal_{pathlib.Path(calibration_uncertainty_file).stem}__" +\
@@ -181,12 +176,17 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     if create_lut:
         lutdir = mkabs(lutdir)
         lutdir.mkdir(parents=True, exist_ok=True)
-        lutdir2 = lutdir / lrttag
-        lutdir2.mkdir(parents=True, exist_ok=True)
         vswir_conf = forward_settings["radiative_transfer"]["radiative_transfer_engines"]["vswir"]
         atmospheric_rtm = vswir_conf["engine_name"]
 
         if atmospheric_rtm == "libradtran":
+            lrttag = f"atm_{lrt_atmosphere_type}__" +\
+                f"szen_{solar_zenith:.2f}__" +\
+                f"ozen_{observer_zenith:.2f}__" +\
+                f"saz_{solar_azimuth:.2f}__" +\
+                f"oaz_{observer_azimuth:.2f}"
+            lutdir2 = lutdir / lrttag
+            lutdir2.mkdir(parents=True, exist_ok=True)
             lrtfile = lutdir2 / "lrt-template.inp"
             with open(rtm_template_file, "r") as f:
                 fs = f.read()
@@ -199,6 +199,17 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
             open(lutdir2 / "prescribed_geom", "w").write(f"99:99:99   {solar_zenith}  {solar_azimuth}")
 
         elif atmospheric_rtm in ("modtran", "simulated_modtran"):
+            loctag = f"atm_{lrt_atmosphere_type}__" +\
+                f"alt_{observer_altitude_km:.2f}__" +\
+                f"doy_{dayofyear:.0f}__" +\
+                f"lat_{latitude:.3f}__lon_{longitude:.3f}"
+            angtag = f"az_{observer_azimuth:.2f}__" +\
+                f"zen_{180 - observer_zenith:.2f}__" +\
+                f"time_{localtime:.2f}__" +\
+                f"elev_{elevation_km:.2f}"
+            lrttag = loctag + "/" + angtag
+            lutdir2 = lutdir / lrttag
+            lutdir2.mkdir(parents=True, exist_ok=True)
             lrtfile = lutdir2 / "modtran-template-h2o.json"
             mt_params = {
                 "atmosphere_type": lrt_atmosphere_type,
