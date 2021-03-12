@@ -312,8 +312,14 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         fwdfile = outdir2 / "forward.json"
         json.dump(isofit_fwd, open(fwdfile, "w"), indent=2)
         logger.info("Starting forward simulation.")
-        Isofit(fwdfile).run()
-        logger.info("Forward simulation complete.")
+        try:
+            Isofit(fwdfile).run()
+            logger.info("Forward simulation complete.")
+        except Exception as err:
+            logger.error("Forward simulation failed with the following error: %s", str(err))
+            with open(outdir2 / "error-forward.txt", "w") as f:
+                f.write(str(err))
+            return None
 
     isofit_inv = copy.deepcopy(isofit_common)
     if inversion_mode == "simple":
@@ -363,24 +369,38 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
             sample_calibration_uncertainty(radfile, radfile_cal, cov_l, cov_wl, rad_wl,
                                            bias_scale=calibration_scale)
             logger.info("Starting inversion (calibration %d/%d)", icalp1, n_calibration_draws)
-            do_inverse(
-                copy.deepcopy(isofit_inv), radfile_cal, reflfile_cal,
-                statefile_cal, atmfile_cal, uncfile_cal,
-                overwrite=overwrite, use_empirical_line=use_empirical_line
-            )
-            logger.info("Inversion complete (calibration %d/%d)", icalp1, n_calibration_draws)
+            try:
+                do_inverse(
+                    copy.deepcopy(isofit_inv), radfile_cal, reflfile_cal,
+                    statefile_cal, atmfile_cal, uncfile_cal,
+                    overwrite=overwrite, use_empirical_line=use_empirical_line
+                )
+                logger.info("Inversion complete (calibration %d/%d)", icalp1, n_calibration_draws)
+            except Exception as err:
+                logger.error("Inversion %d/%d failed with the following error: %s",
+                             icalp1, n_calibration_draws, err)
+                with open(outdir2 / "error-inverse.txt", "w") as f:
+                    f.write(str(err))
+                return None
+
 
     else:
         if est_refl_file.exists() and not overwrite:
             logger.info("Skipping inversion because output exists.")
         else:
             logger.info("Starting inversion.")
-            do_inverse(
-                copy.deepcopy(isofit_inv), radfile, est_refl_file,
-                est_state_file, atm_coef_file, post_unc_file,
-                overwrite=overwrite, use_empirical_line=use_empirical_line
-            )
-            logger.info("Inversion complete.")
+            try:
+                do_inverse(
+                    copy.deepcopy(isofit_inv), radfile, est_refl_file,
+                    est_state_file, atm_coef_file, post_unc_file,
+                    overwrite=overwrite, use_empirical_line=use_empirical_line
+                )
+                logger.info("Inversion complete.")
+            except Exception as err:
+                logger.error("Inversion failed with the following error: %s", err)
+                with open(outdir2 / "error-inverse.txt", "w") as f:
+                    f.write(str(err))
+                return None
     logger.info("Workflow complete!")
 
 
