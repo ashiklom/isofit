@@ -4,6 +4,7 @@
     "rtm_template_file": "/dev/null",
     "lutdir": "./luts/sRTMnet",
     "outdir": "./output/example-srtmnet",
+    "zarrfile": "./output/example-srtmnet-zarr.zarr",
     "isofit": {
         "forward_model": {
             "instrument": {

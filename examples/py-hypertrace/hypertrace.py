@@ -402,6 +402,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                     f.write(str(err))
                 return None
     logger.info("Workflow complete!")
+    return outdir2
 
 
 ##################################################
