@@ -39,6 +39,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   n_calibration_draws=1,
                   calibration_scale=1,
                   create_lut=True,
+                  outdir_scheme="nested",
                   overwrite=False):
     """One iteration of the hypertrace workflow.
 
@@ -127,6 +128,12 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
       atmospheric correction on a segmented image and then resample using the
       empirical line method. If `False`, run Isofit pixel-by-pixel.
 
+      outdir_scheme: (string, default = "nested") How output directories will be
+      structured. Supported options are `nested`, which will create a deep
+      hierarchy of directories with human-readable names, or `hash`, which will
+      create a set of flat directories with integer hashes based on Hypertrace
+      config options.
+
       overwrite: (boolean, default = `False`) If `False` (default), skip steps
       where output files already exist. If `True`, run the full workflow
       regardless of existing files.
@@ -136,6 +143,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     outdir.mkdir(parents=True, exist_ok=True)
 
     assert observer_altitude_km < 100, "Isofit 6S does not support altitude >= 100km"
+    assert outdir_scheme in ("nested", "hash"), "outdir_scheme must be either 'nested' or 'hash'; not " + outdir_scheme
 
     isofit_common = copy.deepcopy(isofit_config)
     # NOTE: All of these settings are *not* copied, but referenced. So these
@@ -244,7 +252,12 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
         vswir_conf["lut_path"] = str(lutdir2)
         vswir_conf["template_file"] = str(lrtfile)
 
-    outdir2 = outdir / lrttag / noisetag / priortag / atmtag / caltag
+    if outdir_scheme == "nested":
+        outdir2 = outdir / lrttag / noisetag / priortag / atmtag / caltag
+    elif outdir_scheme == "hash":
+        hashstring = str(hash((lrttag, noisetag, priortag, atmtag, caltag)))
+        outdir2 = outdir / hashstring
+
     outdir2.mkdir(parents=True, exist_ok=True)
 
     # Observation file, which describes the geometry

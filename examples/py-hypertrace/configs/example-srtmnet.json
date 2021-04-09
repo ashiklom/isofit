@@ -4,7 +4,7 @@
     "rtm_template_file": "/dev/null",
     "lutdir": "./luts/sRTMnet",
     "outdir": "./output/example-srtmnet",
-    "zarrfile": "./output/example-srtmnet-zarr.zarr",
+    "outfile": "./output/example-srtmnet.nc",
     "isofit": {
         "forward_model": {
             "instrument": {
@@ -61,6 +61,7 @@
         "observer_zenith": [0, 22.5],
         "inversion_mode": ["inversion"],
         "noisefile": ["./hypertrace-data/noise/noise_coeff_sbg_cbe0.txt"],
-        "surface_file": ["./hypertrace-data/priors/aviris-ng/surface_EMIT.mat"]
+        "surface_file": ["./hypertrace-data/priors/aviris-ng/surface_EMIT.mat"],
+        "outdir_scheme": ["hash"]
     }
 }

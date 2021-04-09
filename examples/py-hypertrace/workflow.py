@@ -13,14 +13,17 @@ from hypertrace import do_hypertrace, mkabs
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+restart = False
 clean = False
-use_zarr = False
+consolidate_output = False
 if len(sys.argv) > 1:
     configfile = sys.argv[1]
+    if "--restart" in sys.argv:
+        logger.info("Purging existing output to force workflow restart")
+        restart = True
     if "--clean" in sys.argv:
+        logger.info("Raw output will be deleted.")
         clean = True
-    if "--zarr" in sys.argv:
-        use_zarr = True
 else:
     configfile = "./config.json"
 
@@ -29,13 +32,15 @@ logger.info("Using config file `%s`", configfile)
 with open(configfile) as f:
     config = json.load(f)
 
-if use_zarr:
+consolidate_output = "outfile" in config
+if consolidate_output:
     import spectral as sp
     import numpy as np
-    import zarr
-    import datetime
     import xarray as xr
-    zarrfile = mkabs(config["zarrfile"])
+    import dask
+    import netCDF4
+    outfile = mkabs(config["outfile"])
+    logger.info("Consolidating output in `%s`", outfile)
 
 wavelength_file = mkabs(config["wavelength_file"])
 reflectance_file = mkabs(config["reflectance_file"])
@@ -45,10 +50,10 @@ rtm_template_file = mkabs(config["rtm_template_file"])
 lutdir = mkabs(config["lutdir"])
 outdir = mkabs(config["outdir"])
 
-if clean and outdir.exists():
+if restart and outdir.exists():
     shutil.rmtree(outdir)
-    if use_zarr and zarrfile.exists():
-        shutil.rmtree(zarrfile)
+    if consolidate_output:
+        outfile.unlink(missing_ok=True)
 
 isofit_config = config["isofit"]
 hypertrace_config = config["hypertrace"]
@@ -62,7 +67,7 @@ for key in ["lut_path", "template_file", "engine_base_dir"]:
 # Create iterable config permutation object
 ht_iter = list(itertools.product(*hypertrace_config.values()))
 
-if use_zarr:
+if consolidate_output:
     nrow, ncol, *_ = sp.open_image(str(reflectance_file) + ".hdr").shape
     waves = np.loadtxt(wavelength_file)[:,1]
     if np.mean(waves) < 100:
@@ -72,19 +77,23 @@ if use_zarr:
     # Preallocate "blank" dataset full of zeros, but with the right dimensions
     xr.Dataset(
         {
-            "toa_radiance": (["sample", "line", "band", "hypertrace"], zarr.zeros((nrow, ncol, nwaves, nht), dtype='f')),
-            "estimated_reflectance": (["sample", "line", "band", "hypertrace"], zarr.zeros((nrow, ncol, nwaves, nht), dtype='f')),
-            "posterior_uncertainty": (["sample", "line", "statevec", "hypertrace"], zarr.zeros((nrow, ncol, nwaves+2, nht), dtype='f'))
+            "toa_radiance": (["sample", "line", "band", "hypertrace"],
+                             dask.array.empty((nrow, ncol, nwaves, nht), dtype='f')),
+            "estimated_reflectance": (["sample", "line", "band", "hypertrace"],
+                                      dask.array.empty((nrow, ncol, nwaves, nht), dtype='f')),
+            "estimated_state": (["sample", "line", "statevec", "hypertrace"],
+                                dask.array.empty((nrow, ncol, nwaves+2, nht), dtype='f')),
+            "posterior_uncertainty": (["sample", "line", "statevec", "hypertrace"],
+                                      dask.array.empty((nrow, ncol, nwaves+2, nht), dtype='f')),
+            "completed": (["hypertrace"], dask.array.zeros((hypertrace), dtype='?'))
         },
         coords={
             "band": waves,
-            "statevec": np.append(waves, [9200, 9550]),
+            "statevec": np.append([f"RFL_{str(w):.2f}" for w in waves], ["AOT550", "H2OSTR"]),
             "hypertrace": [json.dumps(ht) for ht in ht_iter]
         },
-        attr={"hypertrace_config": config}
-    ).to_zarr(zarrfile, mode='w')
-    # Now, open it for IO
-    dsz = xr.open_zarr(zarrfile)
+        attrs={"hypertrace_config": json.dumps(config)}
+    ).to_netcdf(outfile, mode='w')
 
 logger.info("Starting Hypertrace workflow.")
 for ht, iht in zip(ht_iter, range(len(ht_iter))):
@@ -96,10 +105,16 @@ for ht, iht in zip(ht_iter, range(len(ht_iter))):
                               rtm_template_file, lutdir, outdir,
                               **argd)
     # Post process files here
-    if use_zarr:
+    if consolidate_output:
+        logger.info("Consolidating output from `%s`", str(ht_outdir))
+        dsz = netCDF4.Dataset(outfile, "r+")
+        dsz["completed"][iht] = True
         dsz["toa_radiance"][:,:,:,iht] = sp.open_image(str(ht_outdir / "toa-radiance.hdr"))[:,:,:]
         dsz["estimated_reflectance"][:,:,:,iht] = sp.open_image(str(ht_outdir / "estimated-reflectance.hdr"))[:,:,:]
         dsz["posterior_uncertainty"][:,:,:,iht] = sp.open_image(str(ht_outdir / "posterior-uncertainty.hdr"))[:,:,:]
-        # ...and purge outputs
-        shutil.rmtree(ht_outdir)
-logging.info("Workflow completed successfully.")
+        dsz.close()
+        if clean:
+            logger.info("Deleting output from `%s`", str(ht_outdir))
+            shutil.rmtree(ht_outdir)
+
+logger.info("Workflow completed successfully.")
