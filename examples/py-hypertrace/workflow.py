@@ -40,7 +40,7 @@ if consolidate_output:
     import numpy as np
     import xarray as xr
     import dask
-    import netCDF4
+    import h5netcdf
     outfile = mkabs(config["outfile"])
     logger.info("Consolidating output in `%s`", outfile)
 
@@ -54,8 +54,8 @@ outdir = mkabs(config["outdir"])
 
 if restart and outdir.exists():
     shutil.rmtree(outdir)
-    if consolidate_output:
-        outfile.unlink(missing_ok=True)
+    if consolidate_output and outfile.exists():
+        outfile.unlink()
 
 isofit_config = config["isofit"]
 hypertrace_config = config["hypertrace"]
@@ -87,15 +87,15 @@ if consolidate_output:
                                 dask.array.empty((nrow, ncol, nwaves+2, nht), dtype='f')),
             "posterior_uncertainty": (["sample", "line", "statevec", "hypertrace"],
                                       dask.array.empty((nrow, ncol, nwaves+2, nht), dtype='f')),
-            "completed": (["hypertrace"], dask.array.zeros((hypertrace), dtype='?'))
+            "completed": (["hypertrace"], dask.array.zeros((nht), dtype='?'))
         },
         coords={
             "band": waves,
-            "statevec": np.append([f"RFL_{str(w):.2f}" for w in waves], ["AOT550", "H2OSTR"]),
+            "statevec": np.append([f"RFL_{w:.2f}" for w in waves], ["AOT550", "H2OSTR"]),
             "hypertrace": [json.dumps(ht) for ht in ht_iter]
         },
         attrs={"hypertrace_config": json.dumps(config)}
-    ).to_netcdf(outfile, mode='w')
+    ).to_netcdf(outfile, mode='w', engine='h5netcdf')
 
 # Start Ray once
 implementation = isofit_config["implementation"]
@@ -118,14 +118,13 @@ for ht, iht in zip(ht_iter, range(len(ht_iter))):
                               rayconfig=rayconfig,
                               **argd)
     # Post process files here
-    if consolidate_output:
+    if consolidate_output and ht_outdir is not None:
         logger.info("Consolidating output from `%s`", str(ht_outdir))
-        dsz = netCDF4.Dataset(outfile, "r+")
-        dsz["completed"][iht] = True
-        dsz["toa_radiance"][:,:,:,iht] = sp.open_image(str(ht_outdir / "toa-radiance.hdr"))[:,:,:]
-        dsz["estimated_reflectance"][:,:,:,iht] = sp.open_image(str(ht_outdir / "estimated-reflectance.hdr"))[:,:,:]
-        dsz["posterior_uncertainty"][:,:,:,iht] = sp.open_image(str(ht_outdir / "posterior-uncertainty.hdr"))[:,:,:]
-        dsz.close()
+        with h5netcdf.File(outfile, 'r+') as dsz:
+            dsz["completed"][iht] = True
+            dsz["toa_radiance"][:,:,:,iht] = sp.open_image(str(ht_outdir / "toa-radiance.hdr"))[:,:,:]
+            dsz["estimated_reflectance"][:,:,:,iht] = sp.open_image(str(ht_outdir / "estimated-reflectance.hdr"))[:,:,:]
+            dsz["posterior_uncertainty"][:,:,:,iht] = sp.open_image(str(ht_outdir / "posterior-uncertainty.hdr"))[:,:,:]
         if clean:
             logger.info("Deleting output from `%s`", str(ht_outdir))
             shutil.rmtree(ht_outdir)
