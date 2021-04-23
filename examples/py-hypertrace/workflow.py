@@ -127,6 +127,7 @@ for ht, iht in zip(ht_iter, range(len(ht_iter))):
             dsz["completed"][iht] = True
             dsz["toa_radiance"][:,:,:,iht] = sp.open_image(str(ht_outdir / "toa-radiance.hdr"))[:,:,:]
             dsz["estimated_reflectance"][:,:,:,iht] = sp.open_image(str(ht_outdir / "estimated-reflectance.hdr"))[:,:,:]
+            dsz["estimated_state"][:,:,:,iht] = sp.open_image(str(ht_outdir / "estimated-state.hdr"))[:,:,:]
             dsz["posterior_uncertainty"][:,:,:,iht] = sp.open_image(str(ht_outdir / "posterior-uncertainty.hdr"))[:,:,:]
         if clean:
             logger.info("Deleting output from `%s`", str(ht_outdir))
