@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 restart = False
 clean = False
 consolidate_output = False
+cluster = False
 if len(sys.argv) > 1:
     configfile = sys.argv[1]
     if "--restart" in sys.argv:
@@ -26,6 +27,9 @@ if len(sys.argv) > 1:
     if "--clean" in sys.argv:
         logger.info("Raw output will be deleted.")
         clean = True
+    if "--cluster" in sys.argv:
+        logger.info("Connecting to existing Ray cluster")
+        cluster = True
 else:
     configfile = "./config.json"
 
@@ -98,14 +102,13 @@ if consolidate_output:
     ).to_netcdf(outfile, mode='w', engine='h5netcdf')
 
 # Start Ray once
-implementation = isofit_config["implementation"]
-# redis_password = str(uuid.uuid4())
-redis_password = '5241590000000000'
-rayinit = ray.init(address="auto", _redis_password=redis_password)
-rayconfig = {"ip_head": rayinit["redis_address"],
-             "redis_password": redis_password}
-print(rayinit)
-print(rayconfig)
+rayconfig = None
+if cluster:
+    implementation = isofit_config["implementation"]
+    redis_password = '5241590000000000'
+    rayinit = ray.init(address="auto", _redis_password=redis_password)
+    rayconfig = {"ip_head": rayinit["redis_address"],
+                "redis_password": redis_password}
 
 logger.info("Starting Hypertrace workflow.")
 for ht, iht in zip(ht_iter, range(len(ht_iter))):
