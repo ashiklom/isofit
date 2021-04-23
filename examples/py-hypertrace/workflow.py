@@ -110,16 +110,16 @@ if cluster:
     rayconfig = {"ip_head": rayinit["redis_address"],
                 "redis_password": redis_password}
 
-@ray.remote
-def do_hypertrace_remote(isofit_config, wavelength_file, reflectance_file,
-                         rtm_template_file, lutdir, outdir,
-                         rayconfig, ht):
+logger.info("Starting Hypertrace workflow.")
+for ht, iht in zip(ht_iter, range(len(ht_iter))):
     argd = dict()
     for key, value in zip(hypertrace_config.keys(), ht):
         argd[key] = value
+    logger.info("Running config %d of %d: %s", iht+1, len(ht_iter), argd)
     ht_outdir = do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                               rtm_template_file, lutdir, outdir,
-                              rayconfig=rayconfig, **argd)
+                              rayconfig=rayconfig,
+                              **argd)
     # Post process files here
     if consolidate_output and ht_outdir is not None:
         logger.info("Consolidating output from `%s`", str(ht_outdir))
@@ -131,14 +131,5 @@ def do_hypertrace_remote(isofit_config, wavelength_file, reflectance_file,
         if clean:
             logger.info("Deleting output from `%s`", str(ht_outdir))
             shutil.rmtree(ht_outdir)
-    return None
-
-logger.info("Starting Hypertrace workflow.")
-results = ray.get([
-    do_hypertrace_remote.remote(isofit_config, wavelength_file, reflectance_file,
-                                rtm_template_file, lutdir, outdir,
-                                rayconfig, ht)
-    for ht in ht_iter
-])
 
 logger.info("Workflow completed successfully.")
