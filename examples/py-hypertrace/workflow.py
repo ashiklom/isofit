@@ -7,6 +7,8 @@ import json
 import itertools
 import logging
 import shutil
+import ray
+import uuid
 
 from hypertrace import do_hypertrace, mkabs
 
@@ -95,6 +97,16 @@ if consolidate_output:
         attrs={"hypertrace_config": json.dumps(config)}
     ).to_netcdf(outfile, mode='w')
 
+# Start Ray once
+implementation = isofit_config["implementation"]
+# redis_password = str(uuid.uuid4())
+redis_password = '5241590000000000'
+rayinit = ray.init(address="auto", _redis_password=redis_password)
+rayconfig = {"ip_head": rayinit["redis_address"],
+             "redis_password": redis_password}
+print(rayinit)
+print(rayconfig)
+
 logger.info("Starting Hypertrace workflow.")
 for ht, iht in zip(ht_iter, range(len(ht_iter))):
     argd = dict()
@@ -103,6 +115,7 @@ for ht, iht in zip(ht_iter, range(len(ht_iter))):
     logger.info("Running config %d of %d: %s", iht+1, len(ht_iter), argd)
     ht_outdir = do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                               rtm_template_file, lutdir, outdir,
+                              rayconfig=rayconfig,
                               **argd)
     # Post process files here
     if consolidate_output:

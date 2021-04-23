@@ -40,6 +40,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   calibration_scale=1,
                   create_lut=True,
                   outdir_scheme="nested",
+                  rayconfig=None,
                   overwrite=False):
     """One iteration of the hypertrace workflow.
 
@@ -150,6 +151,11 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     # changes propagate to the `forward_settings` object below.
     forward_settings = isofit_common["forward_model"]
     instrument_settings = forward_settings["instrument"]
+    if rayconfig is not None:
+        logger.info("Configuring Ray")
+        implementation = isofit_common["implementation"]
+        implementation["ip_head"] = rayconfig["ip_head"]
+        implementation["redis_password"] = rayconfig["redis_password"]
     # NOTE: This also propagates to the radiative transfer engine
     instrument_settings["wavelength_file"] = str(mkabs(wavelength_file))
     surface_settings = forward_settings["surface"]
