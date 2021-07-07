@@ -7,6 +7,7 @@ import pathlib
 import json
 import shutil
 import logging
+import hashlib
 
 import numpy as np
 import spectral as sp
@@ -261,7 +262,10 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     if outdir_scheme == "nested":
         outdir2 = outdir / lrttag / noisetag / priortag / atmtag / caltag
     elif outdir_scheme == "hash":
-        hashstring = str(hash((lrttag, noisetag, priortag, atmtag, caltag)))
+        hashmd = hashlib.md5()
+        for s in (lrttag, noisetag, priortag, atmtag, caltag):
+            hashmd.update(s.encode("utf-8"))
+        hashstring = hashmd.hexdigest()
         outdir2 = outdir / hashstring
 
     outdir2.mkdir(parents=True, exist_ok=True)
