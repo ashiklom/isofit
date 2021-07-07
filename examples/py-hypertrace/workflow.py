@@ -7,8 +7,6 @@ import json
 import itertools
 import logging
 import shutil
-import ray
-import uuid
 
 from hypertrace import do_hypertrace, mkabs
 
@@ -19,6 +17,7 @@ restart = False
 clean = False
 consolidate_output = False
 cluster = False
+
 if len(sys.argv) > 1:
     configfile = sys.argv[1]
     if "--restart" in sys.argv:
@@ -28,10 +27,10 @@ if len(sys.argv) > 1:
         logger.info("Raw output will be deleted.")
         clean = True
     if "--cluster" in sys.argv:
-        logger.info("Connecting to existing Ray cluster")
+        logger.info("Running in cluster mode")
         cluster = True
 else:
-    configfile = "./config.json"
+    configfile = "./configs/example-srtmnet.json"
 
 configfile = mkabs(configfile)
 logger.info("Using config file `%s`", configfile)
@@ -47,6 +46,20 @@ if consolidate_output:
     import h5netcdf
     outfile = mkabs(config["outfile"])
     logger.info("Consolidating output in `%s`", outfile)
+
+if cluster:
+    from dask_jobqueue import SLURMCluster
+    from dask.distributed import Client, Lock, wait
+    # TODO: Customize 
+    cluster = SLURMCluster(cores=30, memory='192GB', header_skip=['--mem'])
+    cluster.scale(jobs=2)
+    client = Client(cluster)
+    if consolidate_output:
+        if cluster:
+            lock = Lock(name="NoConcurrentWrites")
+        else:
+            # Placeholder
+            lock = open("/dev/null", "r")
 
 wavelength_file = mkabs(config["wavelength_file"])
 reflectance_file = mkabs(config["reflectance_file"])
@@ -73,6 +86,7 @@ for key in ["lut_path", "template_file", "engine_base_dir"]:
 # Create iterable config permutation object
 ht_iter = list(itertools.product(*hypertrace_config.values()))
 
+# Consolidate output
 if consolidate_output:
     if outfile.exists():
         logger.info("Using to existing output file: %s", outfile)
@@ -105,41 +119,39 @@ if consolidate_output:
             attrs={"hypertrace_config": json.dumps(config)}
         ).to_netcdf(outfile, mode='w', engine='h5netcdf')
 
-# Start Ray once
-rayconfig = None
-if cluster:
-    implementation = isofit_config["implementation"]
-    redis_password = '5241590000000000'
-    rayinit = ray.init(address="auto", _redis_password=redis_password)
-    rayconfig = {"ip_head": rayinit["redis_address"],
-                "redis_password": redis_password}
-
-logger.info("Starting Hypertrace workflow.")
-for ht, iht in zip(ht_iter, range(len(ht_iter))):
+def htfun(ht):
     argd = dict()
     for key, value in zip(hypertrace_config.keys(), ht):
         argd[key] = value
-    logger.info("Running config %d of %d: %s", iht+1, len(ht_iter), argd)
+    logger.info("Running config: %s", argd)
     ht_outdir = do_hypertrace(isofit_config, wavelength_file, reflectance_file,
-                              rtm_template_file, lutdir, outdir,
-                              rayconfig=rayconfig,
-                              **argd)
-    # Post process files here
+            rtm_template_file, lutdir, outdir,
+            **argd)
     if consolidate_output and ht_outdir is not None:
         logger.info("Consolidating output from `%s`", str(ht_outdir))
-        with h5netcdf.File(outfile, 'r+') as dsz:
-            curr_ht = json.dumps(ht)
-            all_ht = dsz["hypertrace"][:]
-            iii = np.where([curr_ht == htstr for htstr in all_ht])
-            assert len(iii) < 2, f"Found {len(iii)} matching HT configs in outfile"
-            assert len(iii) > 0, "Found no matching HT configs in outfile"
-            dsz["completed"][iii] = True
-            dsz["toa_radiance"][:,:,:,iii] = sp.open_image(str(ht_outdir / "toa-radiance.hdr"))[:,:,:]
-            dsz["estimated_reflectance"][:,:,:,iii] = sp.open_image(str(ht_outdir / "estimated-reflectance.hdr"))[:,:,:]
-            dsz["estimated_state"][:,:,:,iii] = sp.open_image(str(ht_outdir / "estimated-state.hdr"))[:,:,:]
-            dsz["posterior_uncertainty"][:,:,:,iii] = sp.open_image(str(ht_outdir / "posterior-uncertainty.hdr"))[:,:,:]
+        # Prevent concurrent writes.
+        with lock:
+            with h5netcdf.File(outfile, 'r+') as dsz:
+                curr_ht = json.dumps(ht)
+                all_ht = dsz["hypertrace"][:]
+                iii = np.where([curr_ht == htstr for htstr in all_ht])
+                assert len(iii) < 2, f"Found {len(iii)} matching HT configs in outfile"
+                assert len(iii) > 0, "Found no matching HT configs in outfile"
+                dsz["completed"][iii] = True
+                dsz["toa_radiance"][:,:,:,iii] = sp.open_image(str(ht_outdir / "toa-radiance.hdr"))[:,:,:]
+                dsz["estimated_reflectance"][:,:,:,iii] = sp.open_image(str(ht_outdir / "estimated-reflectance.hdr"))[:,:,:]
+                dsz["estimated_state"][:,:,:,iii] = sp.open_image(str(ht_outdir / "estimated-state.hdr"))[:,:,:]
+                dsz["posterior_uncertainty"][:,:,:,iii] = sp.open_image(str(ht_outdir / "posterior-uncertainty.hdr"))[:,:,:]
         if clean:
             logger.info("Deleting output from `%s`", str(ht_outdir))
             shutil.rmtree(ht_outdir)
+
+if cluster:
+    logger.info("Starting distributed Hypertrace workflow.")
+    futures = client.map(htfun, ht_iter)
+    wait(futures)
+else:
+    logger.info("Starting sequential Hypertrace workflow.")
+    [htfun(ht) for ht in ht_iter]
 
 logger.info("Workflow completed successfully.")
