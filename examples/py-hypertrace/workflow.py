@@ -138,11 +138,18 @@ def htfun(ht):
                 iii = np.where([curr_ht == htstr for htstr in all_ht])
                 assert len(iii) < 2, f"Found {len(iii)} matching HT configs in outfile"
                 assert len(iii) > 0, "Found no matching HT configs in outfile"
+                iii = iii[0]   # Convert to just an integer
                 dsz["completed"][iii] = True
-                dsz["toa_radiance"][:,:,:,iii] = sp.open_image(str(ht_outdir / "toa-radiance.hdr"))[:,:,:]
-                dsz["estimated_reflectance"][:,:,:,iii] = sp.open_image(str(ht_outdir / "estimated-reflectance.hdr"))[:,:,:]
-                dsz["estimated_state"][:,:,:,iii] = sp.open_image(str(ht_outdir / "estimated-state.hdr"))[:,:,:]
-                dsz["posterior_uncertainty"][:,:,:,iii] = sp.open_image(str(ht_outdir / "posterior-uncertainty.hdr"))[:,:,:]
+                keys_files = {
+                        "toa_radiance": "toa-radiance.hdr",
+                        "estimated_reflectance": "estimated-reflectance.hdr",
+                        "estimated_state": "estimated-state.hdr",
+                        "posterior_uncertainty": "posterior-uncertainty.hdr"
+                        }
+                for key, fname in keys_files.items():
+                    vals = sp.open_image(str(ht_outdir / fname))[:,:,:]
+                    vals2 = np.expand_dims(vals, axis=3)  # Force dimensions to match
+                    dsz[key][:,:,:,iii] = vals2
         if clean:
             logger.info("Deleting output from `%s`", str(ht_outdir))
             shutil.rmtree(ht_outdir)
