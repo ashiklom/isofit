@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 restart = False
 clean = False
 consolidate_output = False
-cluster = False
+cluster_p = False
 
 if len(sys.argv) > 1:
     configfile = sys.argv[1]
@@ -28,7 +28,7 @@ if len(sys.argv) > 1:
         clean = True
     if "--cluster" in sys.argv:
         logger.info("Running in cluster mode")
-        cluster = True
+        cluster_p = True
 else:
     configfile = "./configs/example-srtmnet.json"
 
@@ -47,7 +47,7 @@ if consolidate_output:
     outfile = mkabs(config["outfile"])
     logger.info("Consolidating output in `%s`", outfile)
 
-if cluster:
+if cluster_p:
     from dask_jobqueue import SLURMCluster
     from dask.distributed import Client, Lock, wait
     # TODO: Customize 
@@ -55,7 +55,7 @@ if cluster:
     cluster.scale(jobs=2)
     client = Client(cluster)
     if consolidate_output:
-        if cluster:
+        if cluster_p:
             lock = Lock(name="NoConcurrentWrites")
         else:
             # Placeholder
@@ -68,6 +68,7 @@ if "libradtran_template_file" in config:
 rtm_template_file = mkabs(config["rtm_template_file"])
 lutdir = mkabs(config["lutdir"])
 outdir = mkabs(config["outdir"])
+outdir.mkdir(parents=True, exist_ok=True)
 
 if restart and outdir.exists():
     shutil.rmtree(outdir)
@@ -146,7 +147,7 @@ def htfun(ht):
             logger.info("Deleting output from `%s`", str(ht_outdir))
             shutil.rmtree(ht_outdir)
 
-if cluster:
+if cluster_p:
     logger.info("Starting distributed Hypertrace workflow.")
     futures = client.map(htfun, ht_iter)
     wait(futures)
