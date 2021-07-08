@@ -142,7 +142,7 @@ if cluster_p:
         lut_conf_full = copy.deepcopy(isofit_config)
         lut_conf_full["forward_model"]["radiative_transfer"]["radiative_transfer_engines"]["vswir"] = lut_conf
         lut_conf_full["forward_model"]["instrument"]["wavelength_file"] = str(wavelength_file)
-        ray.init()
+        ray.init(ignore_reinit_error=True)
         RadiativeTransfer(Config(lut_conf_full))
         ray.shutdown()
     lut_futures = client.map(do_rtm, ht_dict_atm)
