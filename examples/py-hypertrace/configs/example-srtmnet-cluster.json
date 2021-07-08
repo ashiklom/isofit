@@ -7,7 +7,7 @@
     "outfile": "./output/example-srtmnet.nc",
     "cluster": {
       "type": "slurm",
-      "jobs": 4,
+      "jobs": 2,
       "args": {
         "cores": 30,
         "memory": "192GB",
