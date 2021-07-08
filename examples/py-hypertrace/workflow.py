@@ -23,7 +23,6 @@ restart = False
 newlut = False
 clean = False
 consolidate_output = False
-cluster_p = False
 
 if len(sys.argv) > 1:
     configfile = sys.argv[1]
@@ -36,9 +35,6 @@ if len(sys.argv) > 1:
     if "--clean" in sys.argv:
         logger.info("Raw output will be deleted.")
         clean = True
-    if "--cluster" in sys.argv:
-        logger.info("Running in cluster mode")
-        cluster_p = True
 else:
     configfile = "./configs/example-srtmnet.json"
 
@@ -57,12 +53,20 @@ if consolidate_output:
     outfile = mkabs(config["outfile"])
     logger.info("Consolidating output in `%s`", outfile)
 
+cluster_p = "cluster" in config
 if cluster_p:
-    from dask_jobqueue import SLURMCluster
+    import dask_jobqueue
     from dask.distributed import Client, Lock, wait
-    # TODO: Customize 
-    cluster = SLURMCluster(cores=30, memory='192GB', header_skip=['--mem'])
-    cluster.scale(jobs=2)
+    cluster_config = config["cluster"]
+    cluster_type = cluster_config["type"].lower()
+    logger.info("Configuring cluster of type '%s'", cluster_type)
+    cluster_func = {
+            "slurm": dask_jobqueue.SLURMCluster,
+            "sge": dask_jobqueue.SGECluster,
+            "pbs": dask_jobqueue.PBSCluster
+            }[cluster_type]
+    cluster = cluster_func(**cluster_config["args"])
+    cluster.scale(jobs=cluster_config["jobs"])
     client = Client(cluster)
     if consolidate_output:
         if cluster_p:
