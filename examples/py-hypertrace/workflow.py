@@ -3,17 +3,24 @@
 # Authors: Alexey Shiklomanov
 
 import sys
+import copy
 import json
 import itertools
 import logging
 import shutil
 
-from hypertrace import do_hypertrace, mkabs
+import ray
+
+from isofit.configs.configs import Config
+from isofit.radiative_transfer.radiative_transfer import RadiativeTransfer
+
+from hypertrace import do_hypertrace, mkabs, setup_lut
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 restart = False
+newlut = False
 clean = False
 consolidate_output = False
 cluster_p = False
@@ -23,6 +30,9 @@ if len(sys.argv) > 1:
     if "--restart" in sys.argv:
         logger.info("Purging existing output to force workflow restart")
         restart = True
+    if "--newlut" in sys.argv:
+        logger.info("Purging existing luts to force rebuild")
+        newlut = True
     if "--clean" in sys.argv:
         logger.info("Raw output will be deleted.")
         clean = True
@@ -68,24 +78,71 @@ if "libradtran_template_file" in config:
 rtm_template_file = mkabs(config["rtm_template_file"])
 lutdir = mkabs(config["lutdir"])
 outdir = mkabs(config["outdir"])
-outdir.mkdir(parents=True, exist_ok=True)
+
+if newlut and lutdir.exists():
+    shutil.rmtree(lutdir)
 
 if restart and outdir.exists():
     shutil.rmtree(outdir)
     if consolidate_output and outfile.exists():
         outfile.unlink()
 
+lutdir.mkdir(parents=True, exist_ok=True)
+outdir.mkdir(parents=True, exist_ok=True)
+
 isofit_config = config["isofit"]
 hypertrace_config = config["hypertrace"]
 
 # Make RTM paths absolute
-vswir_settings = isofit_config["forward_model"]["radiative_transfer"]["radiative_transfer_engines"]["vswir"]
+vswir_conf = isofit_config["forward_model"]["radiative_transfer"]["radiative_transfer_engines"]["vswir"]
 for key in ["lut_path", "template_file", "engine_base_dir"]:
-    if key in vswir_settings:
-        vswir_settings[key] = str(mkabs(vswir_settings[key]))
+    if key in vswir_conf:
+        vswir_conf[key] = str(mkabs(vswir_conf[key]))
 
 # Create iterable config permutation object
 ht_iter = list(itertools.product(*hypertrace_config.values()))
+
+# ...and convert it to a dict, for easier processing
+ht_keys = hypertrace_config.keys()
+ht_dict = list()
+for ht in ht_iter:
+    htd = {key:value for key, value in zip(ht_keys, ht)}
+    if 'atm_aod_h2o' in htd:
+        htd_aah = htd['atm_aod_h2o']
+        htd['atmosphere_type'] = htd_aah[0]
+        htd['aod'] = htd_aah[1]
+        htd['h2o'] = htd_aah[2]
+        del htd['atm_aod_h2o']
+    ht_dict.append(htd)
+
+# If running in cluster mode, eagerly create the inverse look-up tables. This
+# prevents collisions between
+if cluster_p:
+    # 1) Identify the unique LUT combinations that need to be created, based on the HT config
+    logger.info("Building RTM look-up tables (LUTs) first")
+    ht_atm_keys = ["atmosphere_type", 
+            "solar_zenith", "observer_zenith",
+            "solar_azimuth", "observer_azimuth",
+            "observer_altitude_km",
+            "dayofyear", "latitude", "longitude",
+            "localtime", "elevation_km"]
+    ht_dict_atm = list()
+    for htd in ht_dict:
+        dd = {key:htd[key] for key in htd if key in ht_atm_keys}
+        if dd not in ht_dict_atm:
+            ht_dict_atm.append(dd)
+    logger.info("Identified %d unique LUTs to build", len(ht_dict_atm))
+    # 2) For every unique combination, build the LUT
+    def do_rtm(hta):
+        lut_conf, *_ = setup_lut(lutdir, copy.deepcopy(vswir_conf), *hta)
+        lut_conf_full = copy.deepcopy(isofit_config)
+        lut_conf_full["forward_model"]["radiative_transfer"]["radiative_transfer_engines"]["vswir"] = lut_conf
+        lut_conf_full["forward_model"]["instrument"]["wavelength_file"] = str(wavelength_file)
+        ray.init()
+        RadiativeTransfer(Config(lut_conf_full))
+        ray.shutdown()
+    lut_futures = client.map(do_rtm, ht_dict_atm)
+    wait(lut_futures)
 
 # Consolidate output
 if consolidate_output:

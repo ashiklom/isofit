@@ -39,7 +39,6 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                   calibration_uncertainty_file=None,
                   n_calibration_draws=1,
                   calibration_scale=1,
-                  create_lut=True,
                   outdir_scheme="nested",
                   rayconfig=None,
                   overwrite=False):
@@ -188,76 +187,19 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
     else:
         caltag = "cal_NONE__draw_0__scale_0"
 
-    if create_lut:
-        lutdir = mkabs(lutdir)
-        lutdir.mkdir(parents=True, exist_ok=True)
-        vswir_conf = forward_settings["radiative_transfer"]["radiative_transfer_engines"]["vswir"]
-        atmospheric_rtm = vswir_conf["engine_name"]
-
-        if atmospheric_rtm == "libradtran":
-            lrttag = f"atm_{atmosphere_type}__" +\
-                f"szen_{solar_zenith:.2f}__" +\
-                f"ozen_{observer_zenith:.2f}__" +\
-                f"saz_{solar_azimuth:.2f}__" +\
-                f"oaz_{observer_azimuth:.2f}"
-            lutdir2 = lutdir / lrttag
-            lutdir2.mkdir(parents=True, exist_ok=True)
-            lrtfile = lutdir2 / "lrt-template.inp"
-            with open(rtm_template_file, "r") as f:
-                fs = f.read()
-                open(lrtfile, "w").write(fs.format(
-                    atmosphere=atmosphere_type, solar_azimuth=solar_azimuth,
-                    solar_zenith=solar_zenith,
-                    cos_observer_zenith=np.cos(observer_zenith * np.pi / 180.0),
-                    observer_azimuth=observer_azimuth
-                ))
-            open(lutdir2 / "prescribed_geom", "w").write(f"99:99:99   {solar_zenith}  {solar_azimuth}")
-
-        elif atmospheric_rtm in ("modtran", "simulated_modtran"):
-            loctag = f"atm_{atmosphere_type}__" +\
-                f"alt_{observer_altitude_km:.2f}__" +\
-                f"doy_{dayofyear:.0f}__" +\
-                f"lat_{latitude:.3f}__lon_{longitude:.3f}"
-            angtag = f"az_{observer_azimuth:.2f}__" +\
-                f"zen_{180 - observer_zenith:.2f}__" +\
-                f"time_{localtime:.2f}__" +\
-                f"elev_{elevation_km:.2f}"
-            lrttag = loctag + "/" + angtag
-            lutdir2 = lutdir / lrttag
-            lutdir2.mkdir(parents=True, exist_ok=True)
-            lrtfile = lutdir2 / "modtran-template-h2o.json"
-            mt_params = {
-                "atmosphere_type": atmosphere_type,
-                "fid": "hypertrace",
-                "altitude_km": observer_altitude_km,
-                "dayofyear": dayofyear,
-                "latitude": latitude,
-                "longitude": longitude,
-                "to_sensor_azimuth": observer_azimuth,
-                "to_sensor_zenith": 180 - observer_zenith,
-                "gmtime": localtime,
-                "elevation_km": elevation_km,
-                "output_file": lrtfile,
-                "ihaze_type": "AER_NONE"
-            }
-            write_modtran_template(**mt_params)
-            mt_params["ihaze_type"] = "AER_RURAL"
-            mt_params["output_file"] = lutdir2 / "modtran-template.json"
-            write_modtran_template(**mt_params)
-
-            vswir_conf["modtran_template_path"] = str(mt_params["output_file"])
-            if atmospheric_rtm == "simulated_modtran":
-                vswir_conf["interpolator_base_path"] = str(lutdir2 / "sRTMnet_interpolator")
-                # These need to be absolute file paths
-                for path in ["emulator_aux_file", "emulator_file",
-                             "earth_sun_distance_file", "irradiance_file"]:
-                    vswir_conf[path] = str(mkabs(vswir_conf[path]))
-
-        else:
-            raise ValueError(f"Invalid atmospheric rtm {atmospheric_rtm}")
-
-        vswir_conf["lut_path"] = str(lutdir2)
-        vswir_conf["template_file"] = str(lrtfile)
+    lutdir = mkabs(lutdir)
+    lutdir.mkdir(parents=True, exist_ok=True)
+    vswir_conf = forward_settings["radiative_transfer"]["radiative_transfer_engines"]["vswir"]
+    new_vswir_conf, lrttag = setup_lut(
+            lutdir,
+            copy.deepcopy(vswir_conf),
+            atmosphere_type,
+            solar_zenith, observer_zenith,
+            solar_azimuth, observer_azimuth,
+            observer_altitude_km,
+            dayofyear, latitude, longitude,
+            localtime, elevation_km)
+    forward_settings["radiative_transfer"]["radiative_transfer_engines"]["vswir"] = new_vswir_conf
 
     if outdir_scheme == "nested":
         outdir2 = outdir / lrttag / noisetag / priortag / atmtag / caltag
@@ -394,10 +336,9 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
             logger.info("Starting inversion (calibration %d/%d)", icalp1, n_calibration_draws)
             try:
                 do_inverse(
-                    copy.deepcopy(isofit_inv), radfile_cal, reflfile_cal,
-                    statefile_cal, atmfile_cal, uncfile_cal,
-                    overwrite=overwrite, use_empirical_line=use_empirical_line
-                )
+                        copy.deepcopy(isofit_inv), radfile_cal, reflfile_cal,
+                        statefile_cal, atmfile_cal, uncfile_cal,
+                        overwrite=overwrite, use_empirical_line=use_empirical_line)
                 logger.info("Inversion complete (calibration %d/%d)", icalp1, n_calibration_draws)
             except Exception as err:
                 logger.error("Inversion %d/%d failed with the following error: %s",
@@ -416,8 +357,7 @@ def do_hypertrace(isofit_config, wavelength_file, reflectance_file,
                 do_inverse(
                     copy.deepcopy(isofit_inv), radfile, est_refl_file,
                     est_state_file, atm_coef_file, post_unc_file,
-                    overwrite=overwrite, use_empirical_line=use_empirical_line
-                )
+                    overwrite=overwrite, use_empirical_line=use_empirical_line)
                 logger.info("Inversion complete.")
             except Exception as err:
                 logger.error("Inversion failed with the following error: %s", err)
@@ -533,3 +473,79 @@ def sample_calibration_uncertainty(input_file: pathlib.Path,
     Az_resampled = interp1d(cov_wl, Az, fill_value="extrapolate")(rad_wl)
     img_m *= Az_resampled
     return output_file
+
+def setup_lut(
+        lutdir,
+        vswir_conf,
+        atmosphere_type="ATM_MIDLAT_WINTER",
+        solar_zenith=0, observer_zenith=0,
+        solar_azimuth=0, observer_azimuth=0,
+        observer_altitude_km=99.9,
+        dayofyear=200, latitude=34.15, longitude=-118.14,
+        localtime=10.0, elevation_km=0.01):
+    atmospheric_rtm = vswir_conf["engine_name"]
+    if atmospheric_rtm == "libradtran":
+        lrttag = f"atm_{atmosphere_type}__" +\
+            f"szen_{solar_zenith:.2f}__" +\
+            f"ozen_{observer_zenith:.2f}__" +\
+            f"saz_{solar_azimuth:.2f}__" +\
+            f"oaz_{observer_azimuth:.2f}"
+        lutdir2 = lutdir / lrttag
+        lutdir2.mkdir(parents=True, exist_ok=True)
+        lrtfile = lutdir2 / "lrt-template.inp"
+        with open(rtm_template_file, "r") as f:
+            fs = f.read()
+            open(lrtfile, "w").write(fs.format(
+                atmosphere=atmosphere_type, solar_azimuth=solar_azimuth,
+                solar_zenith=solar_zenith,
+                cos_observer_zenith=np.cos(observer_zenith * np.pi / 180.0),
+                observer_azimuth=observer_azimuth
+            ))
+        open(lutdir2 / "prescribed_geom", "w").write(f"99:99:99   {solar_zenith}  {solar_azimuth}")
+
+    elif atmospheric_rtm in ("modtran", "simulated_modtran"):
+        loctag = f"atm_{atmosphere_type}__" +\
+            f"alt_{observer_altitude_km:.2f}__" +\
+            f"doy_{dayofyear:.0f}__" +\
+            f"lat_{latitude:.3f}__lon_{longitude:.3f}"
+        angtag = f"az_{observer_azimuth:.2f}__" +\
+            f"zen_{180 - observer_zenith:.2f}__" +\
+            f"time_{localtime:.2f}__" +\
+            f"elev_{elevation_km:.2f}"
+        lrttag = loctag + "/" + angtag
+        lutdir2 = lutdir / lrttag
+        lutdir2.mkdir(parents=True, exist_ok=True)
+        lrtfile = lutdir2 / "modtran-template-h2o.json"
+        mt_params = {
+            "atmosphere_type": atmosphere_type,
+            "fid": "hypertrace",
+            "altitude_km": observer_altitude_km,
+            "dayofyear": dayofyear,
+            "latitude": latitude,
+            "longitude": longitude,
+            "to_sensor_azimuth": observer_azimuth,
+            "to_sensor_zenith": 180 - observer_zenith,
+            "gmtime": localtime,
+            "elevation_km": elevation_km,
+            "output_file": lrtfile,
+            "ihaze_type": "AER_NONE"
+        }
+        write_modtran_template(**mt_params)
+        mt_params["ihaze_type"] = "AER_RURAL"
+        mt_params["output_file"] = lutdir2 / "modtran-template.json"
+        write_modtran_template(**mt_params)
+
+        vswir_conf["modtran_template_path"] = str(mt_params["output_file"])
+        if atmospheric_rtm == "simulated_modtran":
+            vswir_conf["interpolator_base_path"] = str(lutdir2 / "sRTMnet_interpolator")
+            # These need to be absolute file paths
+            for path in ["emulator_aux_file", "emulator_file",
+                            "earth_sun_distance_file", "irradiance_file"]:
+                vswir_conf[path] = str(mkabs(vswir_conf[path]))
+
+    else:
+        raise ValueError(f"Invalid atmospheric rtm {atmospheric_rtm}")
+
+    vswir_conf["lut_path"] = str(lutdir2)
+    vswir_conf["template_file"] = str(lrtfile)
+    return vswir_conf, lrttag
